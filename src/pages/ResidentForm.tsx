@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/lib/supabase';
@@ -14,13 +14,23 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Upload, User, Users, Heart, Phone } from 'lucide-react';
+import { ArrowLeft, Loader2, Upload, User, Users, Heart, Phone, Home } from 'lucide-react';
+
+interface Room {
+  id: string;
+  room_number: string;
+  room_type: string;
+  max_capacity: number;
+  current_occupants?: number;
+}
 
 export default function ResidentForm() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [selectedRoomId, setSelectedRoomId] = useState<string>('');
 
   const [formData, setFormData] = useState({
     // Personal Details
@@ -56,6 +66,41 @@ export default function ResidentForm() {
     number_of_children: '',
     children_details: '',
   });
+
+  // Fetch available rooms
+  useEffect(() => {
+    const fetchRooms = async () => {
+      const { data: roomsData, error: roomsError } = await supabase
+        .from('rooms')
+        .select('*')
+        .eq('status', 'available');
+
+      if (roomsError) {
+        console.error('Error fetching rooms:', roomsError);
+        return;
+      }
+
+      // Get current occupancy for each room
+      const { data: assignments } = await supabase
+        .from('room_assignments')
+        .select('room_id')
+        .is('end_date', null);
+
+      const occupancyMap: Record<string, number> = {};
+      assignments?.forEach(a => {
+        occupancyMap[a.room_id] = (occupancyMap[a.room_id] || 0) + 1;
+      });
+
+      const roomsWithOccupancy = roomsData?.map(room => ({
+        ...room,
+        current_occupants: occupancyMap[room.id] || 0,
+      })).filter(room => room.current_occupants < room.max_capacity) || [];
+
+      setRooms(roomsWithOccupancy);
+    };
+
+    fetchRooms();
+  }, []);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -105,7 +150,7 @@ export default function ResidentForm() {
       }
 
       // Insert resident
-      const { error } = await supabase.from('residents').insert({
+      const { data: residentData, error } = await supabase.from('residents').insert({
         full_name: formData.full_name,
         age: parseInt(formData.age) || null,
         gender: formData.gender,
@@ -131,13 +176,31 @@ export default function ResidentForm() {
         number_of_children: parseInt(formData.number_of_children) || 0,
         children_details: formData.children_details,
         status: 'active',
-      });
+      }).select().single();
 
       if (error) throw error;
 
+      // Create room assignment if a room was selected
+      if (selectedRoomId && residentData) {
+        const { error: assignmentError } = await supabase.from('room_assignments').insert({
+          resident_id: residentData.id,
+          room_id: selectedRoomId,
+          start_date: new Date().toISOString().split('T')[0],
+        });
+
+        if (assignmentError) {
+          console.error('Error creating room assignment:', assignmentError);
+          toast({
+            title: 'Warning',
+            description: 'Resident created but room assignment failed.',
+            variant: 'destructive',
+          });
+        }
+      }
+
       toast({
         title: 'Resident Added',
-        description: 'The resident has been successfully added.',
+        description: selectedRoomId ? 'Resident added and room assigned.' : 'The resident has been successfully added.',
       });
 
       navigate('/residents');
@@ -196,6 +259,38 @@ export default function ResidentForm() {
                   className="hidden"
                 />
                 <p className="text-xs text-muted-foreground mt-2">PNG, JPG up to 5MB</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Room Assignment */}
+          <div className="form-section">
+            <h2 className="form-section-title flex items-center gap-2">
+              <Home className="w-5 h-5" />
+              Room Assignment
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Assign Room (Optional)</Label>
+                <Select
+                  value={selectedRoomId}
+                  onValueChange={setSelectedRoomId}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a room" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">No room assignment</SelectItem>
+                    {rooms.map((room) => (
+                      <SelectItem key={room.id} value={room.id}>
+                        Room {room.room_number} - {room.room_type} ({room.current_occupants}/{room.max_capacity})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Only rooms with available capacity are shown
+                </p>
               </div>
             </div>
           </div>
