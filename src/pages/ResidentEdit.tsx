@@ -254,7 +254,7 @@ export default function ResidentEdit() {
         }
 
         // Create new assignment if room selected
-        if (selectedRoomId) {
+        if (selectedRoomId && selectedRoomId !== 'none') {
           await supabase.from('room_assignments').insert({
             resident_id: id,
             room_id: selectedRoomId,
@@ -352,7 +352,7 @@ export default function ResidentEdit() {
                     <SelectValue placeholder="Select a room" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No room assignment</SelectItem>
+                    <SelectItem value="none">No room assignment</SelectItem>
                     {rooms.map((room) => (
                       <SelectItem key={room.id} value={room.id}>
                         Room {room.room_number} - {room.room_type} ({room.current_occupants}/{room.max_capacity})
