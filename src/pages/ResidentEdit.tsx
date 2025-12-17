@@ -194,7 +194,7 @@ export default function ResidentEdit() {
       if (photoFile) {
         const fileExt = photoFile.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `resident_photos/${fileName}`;
+        const filePath = fileName;
 
         const { error: uploadError } = await supabase.storage
           .from('resident_photos')
