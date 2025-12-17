@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 import { 
   ArrowLeft, 
   Loader2, 
@@ -14,7 +15,9 @@ import {
   Heart,
   Users,
   Edit,
-  Home
+  Home,
+  FileText,
+  Shield
 } from 'lucide-react';
 
 interface Resident {
@@ -140,151 +143,177 @@ export default function ResidentDetail() {
     return null;
   }
 
-  const InfoItem = ({ label, value }: { label: string; value: string | null | undefined }) => (
+  const InfoItem = ({ label, value, icon }: { label: string; value: string | null | undefined; icon?: React.ReactNode }) => (
     value ? (
-      <div>
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="font-medium">{value}</p>
+      <div className="flex items-start gap-3">
+        {icon && <div className="text-muted-foreground mt-0.5">{icon}</div>}
+        <div>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
+          <p className="font-medium">{value}</p>
+        </div>
       </div>
     ) : null
   );
 
   return (
     <AppLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate('/residents')}>
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden">
-                {resident.photo_url ? (
-                  <img 
-                    src={resident.photo_url} 
-                    alt={resident.full_name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <User className="w-8 h-8 text-primary" />
-                )}
-              </div>
-              <div>
-                <h1 className="page-title">{resident.full_name}</h1>
-                <p className="page-description">
-                  {resident.age} years • {resident.gender} • {resident.marital_status}
-                </p>
-              </div>
-            </div>
-          </div>
-          <Button onClick={() => navigate(`/residents/${id}/edit`)}>
-            <Edit className="w-4 h-4 mr-2" />
-            Edit
+      <div className="max-w-5xl mx-auto space-y-6">
+        {/* Header with Back Button */}
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/residents')}>
+            <ArrowLeft className="w-5 h-5" />
           </Button>
+          <h1 className="text-lg font-semibold">Resident Profile</h1>
         </div>
 
-        {/* Room Assignment */}
-        {roomAssignment?.room && roomAssignment.room[0] && (
+        {/* Profile Card - Hero Section */}
+        <div className="card-elevated overflow-hidden">
+          <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6">
+            <div className="flex flex-col md:flex-row gap-6">
+              {/* Photo */}
+              <div className="flex-shrink-0">
+                <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl bg-background shadow-lg flex items-center justify-center overflow-hidden border-4 border-background">
+                  {resident.photo_url ? (
+                    <img 
+                      src={resident.photo_url} 
+                      alt={resident.full_name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-16 h-16 text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+
+              {/* Basic Info */}
+              <div className="flex-1 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl md:text-3xl font-bold">{resident.full_name}</h2>
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      {resident.age && (
+                        <Badge variant="secondary">{resident.age} years</Badge>
+                      )}
+                      {resident.gender && (
+                        <Badge variant="outline" className="capitalize">{resident.gender}</Badge>
+                      )}
+                      {resident.marital_status && (
+                        <Badge variant="outline" className="capitalize">{resident.marital_status}</Badge>
+                      )}
+                      <Badge className="bg-green-500/10 text-green-600 border-green-500/20">
+                        {resident.status || 'Active'}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Button onClick={() => navigate(`/residents/${id}/edit`)} className="self-start">
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Profile
+                  </Button>
+                </div>
+
+                {/* Quick Info Row */}
+                <div className="flex flex-wrap gap-4 pt-2">
+                  {resident.phone && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Phone className="w-4 h-4 text-muted-foreground" />
+                      <span>{resident.phone}</span>
+                    </div>
+                  )}
+                  {resident.date_of_birth && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Calendar className="w-4 h-4 text-muted-foreground" />
+                      <span>{new Date(resident.date_of_birth).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {roomAssignment?.room && roomAssignment.room[0] && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Home className="w-4 h-4 text-muted-foreground" />
+                      <span>Room {roomAssignment.room[0].room_number} ({roomAssignment.room[0].room_type})</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Main Content Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Personal Details */}
           <div className="card-elevated p-5">
-            <h2 className="form-section-title flex items-center gap-2 mb-4">
-              <Home className="w-5 h-5" />
-              Current Room
-            </h2>
-            <div className="flex items-center gap-4">
-              <div className="px-4 py-2 bg-primary/10 rounded-lg">
-                <p className="text-sm text-muted-foreground">Room Number</p>
-                <p className="font-semibold text-lg">{roomAssignment.room[0].room_number}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Room Type</p>
-                <p className="font-medium capitalize">{roomAssignment.room[0].room_type}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Since</p>
-                <p className="font-medium">{new Date(roomAssignment.start_date).toLocaleDateString()}</p>
-              </div>
+            <h3 className="flex items-center gap-2 font-semibold mb-4">
+              <FileText className="w-5 h-5 text-primary" />
+              Personal Details
+            </h3>
+            <div className="space-y-4">
+              <InfoItem label="Aadhaar Number" value={resident.aadhaar_number} />
+              <InfoItem label="PAN Number" value={resident.pan_number} />
+              {resident.address && (
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide">Address</p>
+                  <p className="font-medium mt-1">{resident.address}</p>
+                </div>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Personal Details */}
-        <div className="card-elevated p-5">
-          <h2 className="form-section-title flex items-center gap-2 mb-4">
-            <User className="w-5 h-5" />
-            Personal Details
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <InfoItem label="Date of Birth" value={resident.date_of_birth ? new Date(resident.date_of_birth).toLocaleDateString() : null} />
-            <InfoItem label="Phone" value={resident.phone} />
-            <InfoItem label="Aadhaar Number" value={resident.aadhaar_number} />
-            <InfoItem label="PAN Number" value={resident.pan_number} />
-            <div className="md:col-span-2 lg:col-span-3">
-              <InfoItem label="Address" value={resident.address} />
+          {/* Emergency Contact */}
+          <div className="card-elevated p-5">
+            <h3 className="flex items-center gap-2 font-semibold mb-4">
+              <Phone className="w-5 h-5 text-red-500" />
+              Emergency Contact
+            </h3>
+            <div className="space-y-4">
+              <InfoItem label="Name" value={resident.emergency_contact_name} />
+              <InfoItem label="Phone" value={resident.emergency_contact_phone} />
+              <InfoItem label="Relationship" value={resident.emergency_contact_relationship} />
+              <InfoItem label="Address" value={resident.emergency_contact_address} />
             </div>
           </div>
-        </div>
 
-        {/* Emergency Contact */}
-        <div className="card-elevated p-5">
-          <h2 className="form-section-title flex items-center gap-2 mb-4">
-            <Phone className="w-5 h-5" />
-            Emergency Contact
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoItem label="Name" value={resident.emergency_contact_name} />
-            <InfoItem label="Phone" value={resident.emergency_contact_phone} />
-            <InfoItem label="Relationship" value={resident.emergency_contact_relationship} />
-            <InfoItem label="Address" value={resident.emergency_contact_address} />
-          </div>
-        </div>
-
-        {/* Guardian Details */}
-        <div className="card-elevated p-5">
-          <h2 className="form-section-title flex items-center gap-2 mb-4">
-            <Users className="w-5 h-5" />
-            Guardian / Introducer
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoItem label="Name" value={resident.guardian_name} />
-            <InfoItem label="Phone" value={resident.guardian_phone} />
-            <InfoItem label="Relationship" value={resident.guardian_relationship} />
-            <InfoItem label="Financial Responsibility" value={resident.guardian_financial_responsibility ? 'Yes' : 'No'} />
-            <div className="md:col-span-2">
+          {/* Guardian Details */}
+          <div className="card-elevated p-5">
+            <h3 className="flex items-center gap-2 font-semibold mb-4">
+              <Shield className="w-5 h-5 text-blue-500" />
+              Guardian / Introducer
+            </h3>
+            <div className="space-y-4">
+              <InfoItem label="Name" value={resident.guardian_name} />
+              <InfoItem label="Phone" value={resident.guardian_phone} />
+              <InfoItem label="Relationship" value={resident.guardian_relationship} />
+              <InfoItem label="Financial Responsibility" value={resident.guardian_financial_responsibility ? 'Yes' : 'No'} />
               <InfoItem label="Address" value={resident.guardian_address} />
             </div>
           </div>
-        </div>
 
-        {/* Health Information */}
-        <div className="card-elevated p-5">
-          <h2 className="form-section-title flex items-center gap-2 mb-4">
-            <Heart className="w-5 h-5" />
-            Health & Medical Information
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <InfoItem label="Chronic Illnesses" value={resident.chronic_illnesses} />
-            <InfoItem label="Allergies" value={resident.allergies} />
-            <InfoItem label="Past Surgeries" value={resident.past_surgeries} />
-            <InfoItem label="Special Medical Notes" value={resident.special_medical_notes} />
-          </div>
-        </div>
-
-        {/* Family Information */}
-        {(resident.number_of_children || resident.children_details) && (
+          {/* Health Information */}
           <div className="card-elevated p-5">
-            <h2 className="form-section-title flex items-center gap-2 mb-4">
-              <Users className="w-5 h-5" />
-              Family Information
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <InfoItem label="Number of Children" value={resident.number_of_children?.toString()} />
-              <div className="md:col-span-2">
+            <h3 className="flex items-center gap-2 font-semibold mb-4">
+              <Heart className="w-5 h-5 text-pink-500" />
+              Health & Medical
+            </h3>
+            <div className="space-y-4">
+              <InfoItem label="Chronic Illnesses" value={resident.chronic_illnesses} />
+              <InfoItem label="Allergies" value={resident.allergies} />
+              <InfoItem label="Past Surgeries" value={resident.past_surgeries} />
+              <InfoItem label="Special Medical Notes" value={resident.special_medical_notes} />
+            </div>
+          </div>
+
+          {/* Family Information */}
+          {(resident.number_of_children || resident.children_details) && (
+            <div className="card-elevated p-5 lg:col-span-2">
+              <h3 className="flex items-center gap-2 font-semibold mb-4">
+                <Users className="w-5 h-5 text-purple-500" />
+                Family Information
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <InfoItem label="Number of Children" value={resident.number_of_children?.toString()} />
                 <InfoItem label="Children Details" value={resident.children_details} />
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </AppLayout>
   );

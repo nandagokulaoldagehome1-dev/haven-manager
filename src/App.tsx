@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Residents from "./pages/Residents";
 import ResidentForm from "./pages/ResidentForm";
 import ResidentDetail from "./pages/ResidentDetail";
+import ResidentEdit from "./pages/ResidentEdit";
 import Rooms from "./pages/Rooms";
 import Payments from "./pages/Payments";
 import FoodMenu from "./pages/FoodMenu";
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/residents" element={<ProtectedRoute><Residents /></ProtectedRoute>} />
             <Route path="/residents/new" element={<ProtectedRoute><ResidentForm /></ProtectedRoute>} />
             <Route path="/residents/:id" element={<ProtectedRoute><ResidentDetail /></ProtectedRoute>} />
+            <Route path="/residents/:id/edit" element={<ProtectedRoute><ResidentEdit /></ProtectedRoute>} />
             <Route path="/rooms" element={<ProtectedRoute><Rooms /></ProtectedRoute>} />
             <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
             <Route path="/food-menu" element={<ProtectedRoute><FoodMenu /></ProtectedRoute>} />
