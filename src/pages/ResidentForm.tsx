@@ -181,7 +181,7 @@ export default function ResidentForm() {
       if (error) throw error;
 
       // Create room assignment if a room was selected
-      if (selectedRoomId && residentData) {
+      if (selectedRoomId && selectedRoomId !== 'none' && residentData) {
         const { error: assignmentError } = await supabase.from('room_assignments').insert({
           resident_id: residentData.id,
           room_id: selectedRoomId,
@@ -200,7 +200,7 @@ export default function ResidentForm() {
 
       toast({
         title: 'Resident Added',
-        description: selectedRoomId ? 'Resident added and room assigned.' : 'The resident has been successfully added.',
+        description: selectedRoomId && selectedRoomId !== 'none' ? 'Resident added and room assigned.' : 'The resident has been successfully added.',
       });
 
       navigate('/residents');
@@ -280,7 +280,7 @@ export default function ResidentForm() {
                     <SelectValue placeholder="Select a room" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">No room assignment</SelectItem>
+                    <SelectItem value="none">No room assignment</SelectItem>
                     {rooms.map((room) => (
                       <SelectItem key={room.id} value={room.id}>
                         Room {room.room_number} - {room.room_type} ({room.current_occupants}/{room.max_capacity})
