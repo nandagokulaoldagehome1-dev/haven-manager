@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
-import { Upload, X, User } from 'lucide-react';
+import { Upload, X, User, Camera, Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { PhotoEditor } from '@/components/PhotoEditor';
 
 // Passport photo aspect ratio (35mm x 45mm = 7:9)
 const PASSPORT_ASPECT_RATIO = 7 / 9;
@@ -17,93 +19,92 @@ interface PhotoUploadProps {
 export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [rawImage, setRawImage] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
 
-  const processImage = useCallback(async (file: File): Promise<{ file: File; preview: string }> => {
+  const processImage = useCallback(async (dataUrl: string): Promise<{ file: File; preview: string }> => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = OUTPUT_WIDTH;
-          canvas.height = OUTPUT_HEIGHT;
-          const ctx = canvas.getContext('2d');
-          
-          if (!ctx) {
-            reject(new Error('Could not get canvas context'));
-            return;
-          }
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = OUTPUT_WIDTH;
+        canvas.height = OUTPUT_HEIGHT;
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
 
-          // Calculate crop dimensions to center the face area
-          const imgAspect = img.width / img.height;
-          const targetAspect = PASSPORT_ASPECT_RATIO;
-          
-          let sourceX = 0;
-          let sourceY = 0;
-          let sourceWidth = img.width;
-          let sourceHeight = img.height;
+        // Calculate crop dimensions to center the face area
+        const imgAspect = img.width / img.height;
+        const targetAspect = PASSPORT_ASPECT_RATIO;
+        
+        let sourceX = 0;
+        let sourceY = 0;
+        let sourceWidth = img.width;
+        let sourceHeight = img.height;
 
-          if (imgAspect > targetAspect) {
-            // Image is wider - crop sides
-            sourceWidth = img.height * targetAspect;
-            sourceX = (img.width - sourceWidth) / 2;
-          } else {
-            // Image is taller - crop top/bottom (favor top portion for face)
-            sourceHeight = img.width / targetAspect;
-            sourceY = Math.max(0, (img.height - sourceHeight) * 0.2); // Favor upper portion
-          }
+        if (imgAspect > targetAspect) {
+          sourceWidth = img.height * targetAspect;
+          sourceX = (img.width - sourceWidth) / 2;
+        } else {
+          sourceHeight = img.width / targetAspect;
+          sourceY = Math.max(0, (img.height - sourceHeight) * 0.2);
+        }
 
-          // Draw with white background
-          ctx.fillStyle = '#ffffff';
-          ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
-          
-          // Draw cropped and resized image
-          ctx.drawImage(
-            img,
-            sourceX, sourceY, sourceWidth, sourceHeight,
-            0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT
-          );
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT);
+        
+        ctx.drawImage(
+          img,
+          sourceX, sourceY, sourceWidth, sourceHeight,
+          0, 0, OUTPUT_WIDTH, OUTPUT_HEIGHT
+        );
 
-          canvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                reject(new Error('Could not create image blob'));
-                return;
-              }
-              const processedFile = new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve({
-                file: processedFile,
-                preview: canvas.toDataURL('image/jpeg', 0.9),
-              });
-            },
-            'image/jpeg',
-            0.9
-          );
-        };
-        img.onerror = () => reject(new Error('Could not load image'));
-        img.src = e.target?.result as string;
+        canvas.toBlob(
+          (blob) => {
+            if (!blob) {
+              reject(new Error('Could not create image blob'));
+              return;
+            }
+            const processedFile = new File([blob], `photo_${Date.now()}.jpg`, {
+              type: 'image/jpeg',
+              lastModified: Date.now(),
+            });
+            resolve({
+              file: processedFile,
+              preview: canvas.toDataURL('image/jpeg', 0.9),
+            });
+          },
+          'image/jpeg',
+          0.9
+        );
       };
-      reader.onerror = () => reject(new Error('Could not read file'));
-      reader.readAsDataURL(file);
+      img.onerror = () => reject(new Error('Could not load image'));
+      img.src = dataUrl;
     });
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      return;
-    }
+    if (!file.type.startsWith('image/')) return;
     
     setIsProcessing(true);
     try {
-      const { file: processedFile, preview } = await processImage(file);
-      onChange(processedFile, preview);
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        setRawImage(dataUrl);
+        
+        const { file: processedFile, preview } = await processImage(dataUrl);
+        onChange(processedFile, preview);
+        setIsProcessing(false);
+      };
+      reader.readAsDataURL(file);
     } catch (error) {
       console.error('Error processing image:', error);
-    } finally {
       setIsProcessing(false);
     }
   }, [processImage, onChange]);
@@ -124,9 +125,7 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    
     if (disabled) return;
-    
     const file = e.dataTransfer.files[0];
     if (file) handleFile(file);
   }, [disabled, handleFile]);
@@ -139,19 +138,39 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
   const handleRemove = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onChange(null, null);
+    setRawImage(null);
     if (inputRef.current) inputRef.current.value = '';
+    if (cameraRef.current) cameraRef.current.value = '';
   }, [onChange]);
 
+  const handleEditSave = useCallback(async (editedDataUrl: string) => {
+    try {
+      const { file: processedFile } = await processImage(editedDataUrl);
+      onChange(processedFile, editedDataUrl);
+    } catch (error) {
+      console.error('Error saving edited image:', error);
+    }
+  }, [processImage, onChange]);
+
+  const openEditor = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (rawImage || value) {
+      setEditorOpen(true);
+    }
+  }, [rawImage, value]);
+
   return (
-    <div className={cn("flex flex-col items-center gap-2", className)}>
+    <div className={cn("flex flex-col items-center gap-3", className)}>
+      {/* Photo Preview Area */}
       <div
-        onClick={() => !disabled && inputRef.current?.click()}
+        onClick={() => !disabled && !value && inputRef.current?.click()}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={cn(
-          "relative w-28 h-36 rounded-lg border-2 border-dashed transition-all cursor-pointer overflow-hidden",
+          "relative w-28 h-36 rounded-lg border-2 border-dashed transition-all overflow-hidden",
           "flex items-center justify-center",
+          !value && "cursor-pointer",
           isDragging && "border-primary bg-primary/5 scale-105",
           !isDragging && !value && "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/50",
           value && "border-transparent",
@@ -167,12 +186,20 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
               className="w-full h-full object-cover"
             />
             {!disabled && (
-              <button
-                onClick={handleRemove}
-                className="absolute top-1 right-1 p-1 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
+              <div className="absolute top-1 right-1 flex gap-1">
+                <button
+                  onClick={openEditor}
+                  className="p-1 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={handleRemove}
+                  className="p-1 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
             )}
           </>
         ) : (
@@ -186,23 +213,68 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
                 </div>
                 <Upload className="w-4 h-4 text-muted-foreground" />
                 <span className="text-[10px] text-muted-foreground leading-tight">
-                  Drop photo or click
+                  Drop or click
                 </span>
               </>
             )}
           </div>
         )}
-        
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleChange}
-          className="hidden"
-          disabled={disabled}
-        />
       </div>
-      <span className="text-[10px] text-muted-foreground">Passport size</span>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => cameraRef.current?.click()}
+          disabled={disabled}
+          className="text-xs px-2 h-8"
+        >
+          <Camera className="w-3 h-3 mr-1" />
+          Camera
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          disabled={disabled}
+          className="text-xs px-2 h-8"
+        >
+          <Upload className="w-3 h-3 mr-1" />
+          Gallery
+        </Button>
+      </div>
+
+      <span className="text-[10px] text-muted-foreground">Passport size photo</span>
+
+      {/* Hidden file inputs */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleChange}
+        className="hidden"
+        disabled={disabled}
+      />
+      <input
+        ref={cameraRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        onChange={handleChange}
+        className="hidden"
+        disabled={disabled}
+      />
+
+      {/* Photo Editor Dialog */}
+      <PhotoEditor
+        open={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        imageSrc={rawImage || value || ''}
+        onSave={handleEditSave}
+      />
     </div>
   );
 }
