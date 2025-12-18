@@ -14,8 +14,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, Upload, User, Users, Heart, Phone, Home } from 'lucide-react';
-import { compressImage, getImageDataUrl } from '@/lib/imageUtils';
+import { ArrowLeft, Loader2, User, Users, Heart, Phone, Home } from 'lucide-react';
+import { PhotoUpload } from '@/components/PhotoUpload';
 
 interface Room {
   id: string;
@@ -112,23 +112,9 @@ export default function ResidentForm() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      try {
-        // Compress the image before storing
-        const compressedFile = await compressImage(file, 800, 800, 0.8);
-        setPhotoFile(compressedFile);
-        const dataUrl = await getImageDataUrl(compressedFile);
-        setPhotoPreview(dataUrl);
-      } catch (error) {
-        console.error('Error compressing image:', error);
-        // Fallback to original file
-        setPhotoFile(file);
-        const dataUrl = await getImageDataUrl(file);
-        setPhotoPreview(dataUrl);
-      }
-    }
+  const handlePhotoChange = (file: File | null, preview: string | null) => {
+    setPhotoFile(file);
+    setPhotoPreview(preview);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -244,31 +230,10 @@ export default function ResidentForm() {
               <User className="w-5 h-5" />
               Photo
             </h2>
-            <div className="flex items-center gap-6">
-              <div className="w-24 h-24 rounded-xl bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-border">
-                {photoPreview ? (
-                  <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" />
-                ) : (
-                  <User className="w-10 h-10 text-muted-foreground" />
-                )}
-              </div>
-              <div>
-                <Label htmlFor="photo" className="cursor-pointer">
-                  <div className="flex items-center gap-2 px-4 py-2 bg-secondary rounded-lg hover:bg-secondary/80 transition-colors">
-                    <Upload className="w-4 h-4" />
-                    <span>Upload Photo</span>
-                  </div>
-                </Label>
-                <Input
-                  id="photo"
-                  type="file"
-                  accept="image/*"
-                  onChange={handlePhotoChange}
-                  className="hidden"
-                />
-                <p className="text-xs text-muted-foreground mt-2">PNG, JPG up to 5MB</p>
-              </div>
-            </div>
+            <PhotoUpload
+              value={photoPreview}
+              onChange={handlePhotoChange}
+            />
           </div>
 
           {/* Room Assignment */}

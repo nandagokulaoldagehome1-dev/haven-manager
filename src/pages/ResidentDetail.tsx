@@ -170,9 +170,9 @@ export default function ResidentDetail() {
         <div className="card-elevated overflow-hidden">
           <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent p-6">
             <div className="flex flex-col md:flex-row gap-6">
-              {/* Photo */}
+              {/* Photo - Passport Size */}
               <div className="flex-shrink-0">
-                <div className="w-32 h-32 md:w-40 md:h-40 rounded-2xl bg-background shadow-lg flex items-center justify-center overflow-hidden border-4 border-background">
+                <div className="w-28 h-36 md:w-32 md:h-[165px] rounded-xl bg-background shadow-lg flex items-center justify-center overflow-hidden border-4 border-background" style={{ aspectRatio: '7/9' }}>
                   {resident.photo_url ? (
                     <img 
                       src={resident.photo_url} 
