@@ -21,6 +21,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { BulkPhotoFix } from '@/components/BulkPhotoFix';
 
 interface Resident {
   id: string;
@@ -76,10 +77,13 @@ export default function Residents() {
               Manage all residents in your care home
             </p>
           </div>
-          <Button onClick={() => navigate('/residents/new')}>
-            <Plus className="w-4 h-4" />
-            Add Resident
-          </Button>
+          <div className="flex items-center gap-2">
+            <BulkPhotoFix />
+            <Button onClick={() => navigate('/residents/new')}>
+              <Plus className="w-4 h-4" />
+              Add Resident
+            </Button>
+          </div>
         </div>
 
         {/* Search Bar */}

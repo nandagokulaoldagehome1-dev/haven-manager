@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { ArrowLeft, Loader2, Upload, User, Users, Heart, Phone, Home } from 'lucide-react';
+import { compressImage, getImageDataUrl } from '@/lib/imageUtils';
 
 interface Room {
   id: string;
@@ -111,15 +112,22 @@ export default function ResidentForm() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setPhotoFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPhotoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        // Compress the image before storing
+        const compressedFile = await compressImage(file, 800, 800, 0.8);
+        setPhotoFile(compressedFile);
+        const dataUrl = await getImageDataUrl(compressedFile);
+        setPhotoPreview(dataUrl);
+      } catch (error) {
+        console.error('Error compressing image:', error);
+        // Fallback to original file
+        setPhotoFile(file);
+        const dataUrl = await getImageDataUrl(file);
+        setPhotoPreview(dataUrl);
+      }
     }
   };
 
