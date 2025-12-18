@@ -111,7 +111,7 @@ export default function Residents() {
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="w-14 h-18 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ aspectRatio: '7/9' }}>
                     {resident.photo_url ? (
                       <img 
                         src={resident.photo_url} 
@@ -119,7 +119,7 @@ export default function Residents() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <Users className="w-8 h-8 text-primary" />
+                      <Users className="w-6 h-6 text-primary" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
