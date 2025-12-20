@@ -19,6 +19,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
+import { downloadReceiptPDF, printReceiptPDF } from '@/lib/pdfGenerator';
 import { 
   Plus, 
   Search,
@@ -28,8 +29,24 @@ import {
   FileText,
   Loader2,
   Download,
-  Share2
+  Share2,
+  Printer,
+  Utensils,
+  Stethoscope,
+  Package,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+
+interface ExtraCharge {
+  id: string;
+  description: string;
+  category: string;
+  amount: number;
+  date_charged: string;
+  month_year: string;
+}
 
 interface Payment {
   id: string;
@@ -42,6 +59,8 @@ interface Payment {
   receipt_number: string;
   status: string;
   notes: string;
+  extra_charges?: ExtraCharge[];
+  base_amount?: number;
 }
 
 interface Resident {
@@ -57,6 +76,9 @@ export default function Payments() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterMonth, setFilterMonth] = useState('');
+  const [selectedResidentCharges, setSelectedResidentCharges] = useState<ExtraCharge[]>([]);
+  const [loadingCharges, setLoadingCharges] = useState(false);
+  const [expandedPayment, setExpandedPayment] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     resident_id: '',
@@ -71,6 +93,14 @@ export default function Payments() {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    if (formData.resident_id) {
+      fetchUnbilledCharges(formData.resident_id);
+    } else {
+      setSelectedResidentCharges([]);
+    }
+  }, [formData.resident_id]);
+
   const fetchData = async () => {
     try {
       // Fetch payments with resident names
@@ -84,12 +114,26 @@ export default function Payments() {
 
       if (paymentsError) throw paymentsError;
 
-      const formattedPayments = paymentsData?.map(p => ({
-        ...p,
-        resident_name: p.residents?.full_name,
-      })) || [];
+      // For each payment, fetch associated extra charges
+      const paymentsWithCharges = await Promise.all(
+        (paymentsData || []).map(async (p) => {
+          const { data: charges } = await supabase
+            .from('resident_extra_charges')
+            .select('*')
+            .eq('payment_id', p.id);
+          
+          const extraChargesTotal = (charges || []).reduce((sum, c) => sum + Number(c.amount), 0);
+          
+          return {
+            ...p,
+            resident_name: p.residents?.full_name,
+            extra_charges: charges || [],
+            base_amount: p.amount - extraChargesTotal,
+          };
+        })
+      );
 
-      setPayments(formattedPayments);
+      setPayments(paymentsWithCharges);
 
       // Fetch residents for dropdown
       const { data: residentsData } = await supabase
@@ -106,6 +150,25 @@ export default function Payments() {
     }
   };
 
+  const fetchUnbilledCharges = async (residentId: string) => {
+    setLoadingCharges(true);
+    try {
+      const { data, error } = await supabase
+        .from('resident_extra_charges')
+        .select('*')
+        .eq('resident_id', residentId)
+        .eq('is_billed', false)
+        .order('date_charged', { ascending: false });
+
+      if (error) throw error;
+      setSelectedResidentCharges(data || []);
+    } catch (error) {
+      console.error('Error fetching charges:', error);
+    } finally {
+      setLoadingCharges(false);
+    }
+  };
+
   const generateReceiptNumber = () => {
     const date = new Date();
     const year = date.getFullYear().toString().slice(-2);
@@ -114,6 +177,10 @@ export default function Payments() {
     return `RCP${year}${month}${random}`;
   };
 
+  const totalExtraCharges = selectedResidentCharges.reduce((sum, c) => sum + Number(c.amount), 0);
+  const baseAmount = parseFloat(formData.amount) || 0;
+  const grandTotal = baseAmount + totalExtraCharges;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -121,22 +188,52 @@ export default function Payments() {
     try {
       const receiptNumber = generateReceiptNumber();
 
-      const { error } = await supabase.from('payments').insert({
-        resident_id: formData.resident_id,
-        amount: parseFloat(formData.amount),
-        payment_date: formData.payment_date,
-        payment_method: formData.payment_method,
-        month_year: formData.month_year,
-        receipt_number: receiptNumber,
-        status: 'completed',
-        notes: formData.notes,
-      });
+      // Insert payment with total amount
+      const { data: paymentData, error: paymentError } = await supabase
+        .from('payments')
+        .insert({
+          resident_id: formData.resident_id,
+          amount: grandTotal,
+          payment_date: formData.payment_date,
+          payment_method: formData.payment_method,
+          month_year: formData.month_year,
+          receipt_number: receiptNumber,
+          status: 'completed',
+          notes: formData.notes,
+        })
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (paymentError) throw paymentError;
+
+      // Mark extra charges as billed
+      if (selectedResidentCharges.length > 0) {
+        const chargeIds = selectedResidentCharges.map(c => c.id);
+        const { error: updateError } = await supabase
+          .from('resident_extra_charges')
+          .update({ is_billed: true, payment_id: paymentData.id })
+          .in('id', chargeIds);
+
+        if (updateError) throw updateError;
+      }
 
       toast({
         title: 'Payment Recorded',
-        description: `Receipt #${receiptNumber} generated.`,
+        description: `Receipt #${receiptNumber} generated with total ₹${grandTotal.toLocaleString()}`,
+      });
+
+      // Generate and download PDF
+      const resident = residents.find(r => r.id === formData.resident_id);
+      downloadReceiptPDF({
+        receiptNumber,
+        residentName: resident?.full_name || 'Unknown',
+        paymentDate: formData.payment_date,
+        monthYear: formData.month_year,
+        paymentMethod: formData.payment_method,
+        baseAmount,
+        extraCharges: selectedResidentCharges,
+        totalAmount: grandTotal,
+        notes: formData.notes,
       });
 
       setDialogOpen(false);
@@ -162,30 +259,76 @@ export default function Payments() {
       month_year: '',
       notes: '',
     });
+    setSelectedResidentCharges([]);
   };
 
   const shareOnWhatsApp = (payment: Payment) => {
-    const message = `
+    let message = `
 🧾 *Payment Receipt*
 ━━━━━━━━━━━━━━━
 Receipt #: ${payment.receipt_number}
 Resident: ${payment.resident_name}
-Amount: ₹${payment.amount.toLocaleString()}
 Date: ${new Date(payment.payment_date).toLocaleDateString()}
 For Month: ${payment.month_year}
 Method: ${payment.payment_method}
 ━━━━━━━━━━━━━━━
-Thank you for your payment!
-    `.trim();
+`;
+    
+    if (payment.extra_charges && payment.extra_charges.length > 0) {
+      message += `\nBase Charges: ₹${payment.base_amount?.toLocaleString()}\n`;
+      message += `\n*Additional Charges:*\n`;
+      payment.extra_charges.forEach(charge => {
+        message += `• ${charge.description}: ₹${Number(charge.amount).toLocaleString()}\n`;
+      });
+      message += `━━━━━━━━━━━━━━━\n`;
+    }
+    
+    message += `*Total: ₹${payment.amount.toLocaleString()}*\n━━━━━━━━━━━━━━━\nThank you for your payment!`;
 
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(message.trim())}`;
     window.open(url, '_blank');
+  };
+
+  const handleDownloadPDF = (payment: Payment) => {
+    downloadReceiptPDF({
+      receiptNumber: payment.receipt_number,
+      residentName: payment.resident_name || 'Unknown',
+      paymentDate: payment.payment_date,
+      monthYear: payment.month_year,
+      paymentMethod: payment.payment_method,
+      baseAmount: payment.base_amount || payment.amount,
+      extraCharges: payment.extra_charges || [],
+      totalAmount: payment.amount,
+      notes: payment.notes,
+    });
+  };
+
+  const handlePrintPDF = (payment: Payment) => {
+    printReceiptPDF({
+      receiptNumber: payment.receipt_number,
+      residentName: payment.resident_name || 'Unknown',
+      paymentDate: payment.payment_date,
+      monthYear: payment.month_year,
+      paymentMethod: payment.payment_method,
+      baseAmount: payment.base_amount || payment.amount,
+      extraCharges: payment.extra_charges || [],
+      totalAmount: payment.amount,
+      notes: payment.notes,
+    });
+  };
+
+  const getCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'food': return Utensils;
+      case 'medical': return Stethoscope;
+      default: return Package;
+    }
   };
 
   const filteredPayments = payments.filter(payment => {
     const matchesSearch = payment.resident_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.receipt_number.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesMonth = !filterMonth || payment.month_year === filterMonth;
+    const matchesMonth = !filterMonth || filterMonth === 'all' || payment.month_year === filterMonth;
     return matchesSearch && matchesMonth;
   });
 
@@ -220,7 +363,7 @@ Thank you for your payment!
                 Record Payment
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Record New Payment</DialogTitle>
               </DialogHeader>
@@ -243,17 +386,69 @@ Thank you for your payment!
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Extra Charges Section */}
+                {formData.resident_id && (
+                  <div className="rounded-lg border p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Pending Extra Charges</span>
+                      {loadingCharges && <Loader2 className="w-4 h-4 animate-spin" />}
+                    </div>
+                    {selectedResidentCharges.length > 0 ? (
+                      <div className="space-y-2">
+                        {selectedResidentCharges.map((charge) => {
+                          const Icon = getCategoryIcon(charge.category);
+                          return (
+                            <div key={charge.id} className="flex items-center justify-between text-sm p-2 bg-muted/50 rounded">
+                              <div className="flex items-center gap-2">
+                                <Icon className="w-4 h-4 text-muted-foreground" />
+                                <span>{charge.description}</span>
+                              </div>
+                              <span className="font-medium">₹{Number(charge.amount).toLocaleString()}</span>
+                            </div>
+                          );
+                        })}
+                        <div className="flex items-center justify-between pt-2 border-t font-medium">
+                          <span>Extra Charges Total</span>
+                          <span className="text-primary">₹{totalExtraCharges.toLocaleString()}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No pending charges</p>
+                    )}
+                  </div>
+                )}
+
                 <div>
-                  <Label htmlFor="amount">Amount (₹)</Label>
+                  <Label htmlFor="amount">Base Amount (₹)</Label>
                   <Input
                     id="amount"
                     type="number"
                     value={formData.amount}
                     onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="Enter amount"
+                    placeholder="Monthly rent/charges"
                     required
                   />
                 </div>
+
+                {/* Grand Total */}
+                {formData.amount && (
+                  <div className="rounded-lg bg-primary/10 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium">Grand Total</span>
+                      <span className="text-xl font-bold text-primary flex items-center">
+                        <IndianRupee className="w-4 h-4" />
+                        {grandTotal.toLocaleString()}
+                      </span>
+                    </div>
+                    {totalExtraCharges > 0 && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        (Base: ₹{baseAmount.toLocaleString()} + Extra: ₹{totalExtraCharges.toLocaleString()})
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="payment_date">Payment Date</Label>
@@ -316,7 +511,7 @@ Thank you for your payment!
                   </Button>
                   <Button type="submit" disabled={saving}>
                     {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Record Payment
+                    Record & Download PDF
                   </Button>
                 </div>
               </form>
@@ -360,51 +555,104 @@ Thank you for your payment!
             {filteredPayments.map((payment, index) => (
               <div 
                 key={payment.id}
-                className="card-elevated p-4 animate-slide-up"
+                className="card-elevated overflow-hidden animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
-                    <CreditCard className="w-6 h-6 text-success" />
-                  </div>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold">{payment.resident_name}</h3>
-                        <p className="text-sm text-muted-foreground">
-                          Receipt #{payment.receipt_number}
-                        </p>
+                <div className="p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
+                      <CreditCard className="w-6 h-6 text-success" />
+                    </div>
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-semibold">{payment.resident_name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            Receipt #{payment.receipt_number}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-lg flex items-center justify-end gap-1">
+                            <IndianRupee className="w-4 h-4" />
+                            {payment.amount.toLocaleString()}
+                          </p>
+                          <span className="badge-success">Paid</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold text-lg flex items-center justify-end gap-1">
-                          <IndianRupee className="w-4 h-4" />
-                          {payment.amount.toLocaleString()}
-                        </p>
-                        <span className="badge-success">Paid</span>
+
+                      <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          {new Date(payment.payment_date).toLocaleDateString()}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <FileText className="w-4 h-4" />
+                          For: {payment.month_year}
+                        </span>
+                        <span className="capitalize">{payment.payment_method.replace('_', ' ')}</span>
+                        {payment.extra_charges && payment.extra_charges.length > 0 && (
+                          <Badge variant="secondary" className="text-xs">
+                            +{payment.extra_charges.length} extra charges
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {new Date(payment.payment_date).toLocaleDateString()}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <FileText className="w-4 h-4" />
-                        For: {payment.month_year}
-                      </span>
-                      <span className="capitalize">{payment.payment_method.replace('_', ' ')}</span>
+                    <div className="flex items-center gap-2 sm:flex-shrink-0">
+                      {payment.extra_charges && payment.extra_charges.length > 0 && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setExpandedPayment(expandedPayment === payment.id ? null : payment.id)}
+                        >
+                          {expandedPayment === payment.id ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(payment)}>
+                        <Download className="w-4 h-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handlePrintPDF(payment)}>
+                        <Printer className="w-4 h-4" />
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => shareOnWhatsApp(payment)}>
+                        <Share2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 sm:flex-shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => shareOnWhatsApp(payment)}>
-                      <Share2 className="w-4 h-4" />
-                      <span className="hidden sm:inline ml-1">Share</span>
-                    </Button>
                   </div>
                 </div>
+
+                {/* Expanded Extra Charges */}
+                {expandedPayment === payment.id && payment.extra_charges && payment.extra_charges.length > 0 && (
+                  <div className="border-t bg-muted/30 p-4">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Charge Breakdown</p>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Base Charges</span>
+                        <span className="font-medium">₹{payment.base_amount?.toLocaleString()}</span>
+                      </div>
+                      {payment.extra_charges.map((charge) => {
+                        const Icon = getCategoryIcon(charge.category);
+                        return (
+                          <div key={charge.id} className="flex items-center justify-between text-sm">
+                            <span className="flex items-center gap-2">
+                              <Icon className="w-4 h-4 text-muted-foreground" />
+                              {charge.description}
+                              <span className="text-xs text-muted-foreground">
+                                ({new Date(charge.date_charged).toLocaleDateString()})
+                              </span>
+                            </span>
+                            <span className="font-medium">₹{Number(charge.amount).toLocaleString()}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
