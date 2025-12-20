@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { ResidentExtraCharges } from '@/components/ResidentExtraCharges';
 import { 
   ArrowLeft, 
   Loader2, 
@@ -302,7 +303,7 @@ export default function ResidentDetail() {
 
           {/* Family Information */}
           {(resident.number_of_children || resident.children_details) && (
-            <div className="card-elevated p-5 lg:col-span-2">
+            <div className="card-elevated p-5">
               <h3 className="flex items-center gap-2 font-semibold mb-4">
                 <Users className="w-5 h-5 text-purple-500" />
                 Family Information
@@ -313,6 +314,14 @@ export default function ResidentDetail() {
               </div>
             </div>
           )}
+
+          {/* Extra Charges Section */}
+          <div className="card-elevated p-5">
+            <ResidentExtraCharges 
+              residentId={resident.id} 
+              residentName={resident.full_name} 
+            />
+          </div>
         </div>
       </div>
     </AppLayout>

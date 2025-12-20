@@ -167,6 +167,48 @@ export type Database = {
           },
         ]
       }
+      resident_extra_charges: {
+        Row: {
+          amount: number
+          category: string
+          created_at: string | null
+          date_charged: string
+          description: string
+          id: string
+          is_billed: boolean | null
+          month_year: string
+          payment_id: string | null
+          resident_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string
+          created_at?: string | null
+          date_charged?: string
+          description: string
+          id?: string
+          is_billed?: boolean | null
+          month_year: string
+          payment_id?: string | null
+          resident_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string
+          created_at?: string | null
+          date_charged?: string
+          description?: string
+          id?: string
+          is_billed?: boolean | null
+          month_year?: string
+          payment_id?: string | null
+          resident_id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       residents: {
         Row: {
           aadhaar_number: string | null
