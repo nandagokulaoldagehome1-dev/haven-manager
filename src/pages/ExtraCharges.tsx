@@ -76,30 +76,38 @@ export default function ExtraCharges() {
 
   const fetchData = async () => {
     try {
-      const { data: chargesData, error: chargesError } = await supabase
-        .from('resident_extra_charges')
-        .select(`
-          *,
-          residents (full_name)
-        `)
-        .order('date_charged', { ascending: false });
-
-      if (chargesError) throw chargesError;
-
-      const chargesWithNames = (chargesData || []).map(c => ({
-        ...c,
-        resident_name: c.residents?.full_name,
-      }));
-
-      setCharges(chargesWithNames);
-
-      const { data: residentsData } = await supabase
+      // Fetch residents first
+      const { data: residentsData, error: residentsError } = await supabase
         .from('residents')
         .select('id, full_name')
         .eq('status', 'active')
         .order('full_name');
 
+      if (residentsError) {
+        console.error('Error fetching residents:', residentsError);
+      }
       setResidents(residentsData || []);
+
+      // Fetch charges
+      const { data: chargesData, error: chargesError } = await supabase
+        .from('resident_extra_charges')
+        .select('*')
+        .order('date_charged', { ascending: false });
+
+      if (chargesError) {
+        console.error('Error fetching charges:', chargesError);
+      }
+
+      // Map resident names to charges
+      const chargesWithNames = (chargesData || []).map(c => {
+        const resident = (residentsData || []).find(r => r.id === c.resident_id);
+        return {
+          ...c,
+          resident_name: resident?.full_name || 'Unknown',
+        };
+      });
+
+      setCharges(chargesWithNames);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
