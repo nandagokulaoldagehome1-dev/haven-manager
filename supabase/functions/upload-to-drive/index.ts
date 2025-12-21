@@ -38,9 +38,9 @@ async function getAccessToken(serviceAccount: ServiceAccount): Promise<string> {
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
     .replace(/\n/g, '');
-  
+
   const binaryKey = Uint8Array.from(atob(pemContents), c => c.charCodeAt(0));
-  
+
   const cryptoKey = await crypto.subtle.importKey(
     'pkcs8',
     binaryKey,
@@ -81,9 +81,6 @@ async function uploadToDrive(
   mimeType: string,
   folderId?: string
 ): Promise<{ id: string; webViewLink: string }> {
-  // Decode base64 file content
-  const binaryContent = Uint8Array.from(atob(fileContent), c => c.charCodeAt(0));
-
   const metadata: Record<string, any> = {
     name: fileName,
     mimeType: mimeType,
@@ -98,8 +95,8 @@ async function uploadToDrive(
   const closeDelimiter = `\r\n--${boundary}--`;
 
   const metadataStr = JSON.stringify(metadata);
-  
-  // Build multipart body
+
+  // Build multipart body (metadata JSON + base64 file content)
   const bodyParts = [
     delimiter,
     'Content-Type: application/json; charset=UTF-8\r\n\r\n',
@@ -121,29 +118,32 @@ async function uploadToDrive(
         Authorization: `Bearer ${accessToken}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
-      body: body,
+      body,
     }
   );
 
-  const data = await response.json();
-  
+  const data = await response.json().catch(() => ({}));
+
   if (!response.ok) {
     console.error('Upload error:', data);
     throw new Error(data.error?.message || 'Failed to upload to Google Drive');
   }
 
   // Make file publicly viewable
-  const permRes = await fetch(`https://www.googleapis.com/drive/v3/files/${data.id}/permissions?supportsAllDrives=true`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      role: 'reader',
-      type: 'anyone',
-    }),
-  });
+  const permRes = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${data.id}/permissions?supportsAllDrives=true`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        role: 'reader',
+        type: 'anyone',
+      }),
+    }
+  );
   if (!permRes.ok) {
     const permErr = await permRes.json().catch(() => ({}));
     console.error('Permission error:', permErr);
@@ -157,7 +157,7 @@ async function uploadToDrive(
 }
 
 async function deleteFromDrive(accessToken: string, fileId: string): Promise<void> {
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?supportsAllDrives=true`, {
     method: 'DELETE',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -165,54 +165,9 @@ async function deleteFromDrive(accessToken: string, fileId: string): Promise<voi
   });
 
   if (!response.ok && response.status !== 404) {
-    const error = await response.json();
+    const error = await response.json().catch(() => ({}));
     throw new Error(error.error?.message || 'Failed to delete from Google Drive');
   }
-}
-
-async function findFolder(accessToken: string, name: string): Promise<string | null> {
-  const query = encodeURIComponent(`name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`);
-  const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`;
-
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
-
-  if (!response.ok) {
-    return null;
-  }
-
-  const data = await response.json();
-  const files = data.files as Array<{ id: string; name: string }> | undefined;
-  if (files && files.length > 0) {
-    return files[0].id;
-  }
-  return null;
-}
-
-async function createFolder(accessToken: string, name: string, parentId?: string): Promise<string> {
-  const metadata: Record<string, any> = {
-    name,
-    mimeType: 'application/vnd.google-apps.folder',
-  };
-  if (parentId) {
-    metadata.parents = [parentId];
-  }
-
-  const response = await fetch('https://www.googleapis.com/drive/v3/files', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(metadata),
-  });
-
-  const data = await response.json();
-  if (!response.ok || !data.id) {
-    throw new Error(data.error?.message || 'Failed to create folder in Google Drive');
-  }
-  return data.id as string;
 }
 
 serve(async (req) => {
@@ -239,28 +194,47 @@ serve(async (req) => {
         throw new Error('Missing required fields: fileName, fileContent, mimeType');
       }
 
-      let targetFolderId = folderId || Deno.env.get('GOOGLE_DRIVE_FOLDER_ID') || undefined;
+      // Service accounts have no storage quota in “My Drive”.
+      // We MUST upload into a folder owned by a real Google account / Shared Drive,
+      // and that folder must be shared with the service account email.
+      const targetFolderId = folderId || Deno.env.get('GOOGLE_DRIVE_FOLDER_ID');
       if (!targetFolderId) {
-        // Determine desired folder name from env or default
-        const desiredFolderName = Deno.env.get('GOOGLE_DRIVE_FOLDER_NAME') || DEFAULT_FOLDER_NAME;
-        // Try to find the folder; if not found, create it
-        targetFolderId = await findFolder(accessToken, desiredFolderName);
-        if (!targetFolderId) {
-          targetFolderId = await createFolder(accessToken, desiredFolderName);
-          console.log(`Created folder '${desiredFolderName}' with id ${targetFolderId}`);
-        } else {
-          console.log(`Using existing folder '${desiredFolderName}' with id ${targetFolderId}`);
-        }
+        throw new Error(
+          'Missing GOOGLE_DRIVE_FOLDER_ID. Create a Drive folder in your account, share it with the service account (client_email), then set GOOGLE_DRIVE_FOLDER_ID to that folder id.'
+        );
       }
+
+      // Validate folder access so the error is actionable.
+      const folderCheckRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${targetFolderId}?fields=id,name,mimeType&supportsAllDrives=true`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      const folderCheck = await folderCheckRes.json().catch(() => ({}));
+      if (!folderCheckRes.ok) {
+        console.error('Folder access check failed:', {
+          targetFolderId,
+          status: folderCheckRes.status,
+          body: folderCheck,
+        });
+        throw new Error(
+          'Cannot access GOOGLE_DRIVE_FOLDER_ID. Ensure the folder is shared with the service account email (Editor) and the folder id is correct.'
+        );
+      }
+      if (folderCheck?.mimeType !== 'application/vnd.google-apps.folder') {
+        throw new Error('GOOGLE_DRIVE_FOLDER_ID is not a folder id. Copy it from a Drive URL containing /folders/<id>.');
+      }
+
+      console.log(`Uploading to folder: ${targetFolderId} (${folderCheck?.name || 'unknown'})`);
 
       const result = await uploadToDrive(accessToken, fileName, fileContent, mimeType, targetFolderId);
       console.log(`File uploaded successfully: ${result.id}`);
 
-      return new Response(
-        JSON.stringify({ success: true, ...result }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } else if (action === 'delete') {
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (action === 'delete') {
       if (!fileId) {
         throw new Error('Missing required field: fileId');
       }
@@ -268,19 +242,18 @@ serve(async (req) => {
       await deleteFromDrive(accessToken, fileId);
       console.log(`File deleted successfully: ${fileId}`);
 
-      return new Response(
-        JSON.stringify({ success: true }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } else {
-      throw new Error('Invalid action. Use "upload" or "delete"');
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
+
+    throw new Error('Invalid action. Use "upload" or "delete"');
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('Error:', errorMessage);
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ success: false, error: errorMessage }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
   }
 });
