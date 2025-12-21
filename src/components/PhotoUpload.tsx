@@ -262,7 +262,7 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
         ref={cameraRef}
         type="file"
         accept="image/*"
-        capture="user"
+        capture="environment"
         onChange={handleChange}
         className="hidden"
         disabled={disabled}
