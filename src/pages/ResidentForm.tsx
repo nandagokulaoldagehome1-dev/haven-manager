@@ -22,6 +22,7 @@ interface Room {
   room_number: string;
   room_type: string;
   max_capacity: number;
+  base_monthly_charge: number;
   current_occupants?: number;
 }
 

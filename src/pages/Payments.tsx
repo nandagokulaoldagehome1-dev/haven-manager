@@ -19,7 +19,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { toast } from '@/hooks/use-toast';
-import { downloadReceiptPDF, printReceiptPDF } from '@/lib/pdfGenerator';
+import { generateReceiptPDF, downloadReceiptPDF, printReceiptPDF } from '@/lib/pdfGenerator';
 import { 
   Plus, 
   Search,
