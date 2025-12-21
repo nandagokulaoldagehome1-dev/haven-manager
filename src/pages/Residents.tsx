@@ -13,15 +13,18 @@ import {
   MoreVertical,
   Eye,
   Edit,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { BulkPhotoFix } from '@/components/BulkPhotoFix';
+import { toast } from '@/hooks/use-toast';
 
 interface Resident {
   id: string;
@@ -59,6 +62,43 @@ export default function Residents() {
       console.error('Error fetching residents:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (resident: Resident) => {
+    if (!confirm(`Are you sure you want to delete ${resident.full_name}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete related records first
+      await supabase.from('room_assignments').delete().eq('resident_id', resident.id);
+      await supabase.from('payments').delete().eq('resident_id', resident.id);
+      await supabase.from('documents').delete().eq('resident_id', resident.id);
+      await supabase.from('reminders').delete().eq('resident_id', resident.id);
+      await supabase.from('resident_extra_charges').delete().eq('resident_id', resident.id);
+
+      // Delete the resident
+      const { error } = await supabase
+        .from('residents')
+        .delete()
+        .eq('id', resident.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Resident Deleted',
+        description: `${resident.full_name} has been removed.`,
+      });
+
+      fetchResidents();
+    } catch (error: any) {
+      console.error('Error deleting resident:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete resident',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -144,6 +184,14 @@ export default function Residents() {
                           <DropdownMenuItem onClick={() => navigate(`/residents/${resident.id}/edit`)}>
                             <Edit className="w-4 h-4 mr-2" />
                             Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleDelete(resident)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
