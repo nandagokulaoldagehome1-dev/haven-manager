@@ -130,49 +130,40 @@ export default function Documents() {
     setUploading(true);
 
     try {
-      // Convert file to base64
-      const base64Content = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const result = reader.result as string;
-          const base64 = result.split(',')[1];
-          resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(selectedFile);
-      });
+      const fileExt = selectedFile.name.split('.').pop() || 'bin';
+      const safeType = formData.document_type || 'document';
+      const filePath = `${formData.resident_id}/${safeType}_${Date.now()}.${fileExt}`;
 
-      const fileName = `${formData.document_type}_${Date.now()}_${selectedFile.name}`;
+      const { error: uploadError } = await supabase.storage
+        .from('medical_documents')
+        .upload(filePath, selectedFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: selectedFile.type || undefined,
+        });
 
-      // Upload to Google Drive via edge function
-      const response = await supabase.functions.invoke('upload-to-drive', {
-        body: {
-          action: 'upload',
-          fileName,
-          fileContent: base64Content,
-          mimeType: selectedFile.type,
-        },
-      });
+      if (uploadError) throw uploadError;
 
-      if (response.error || !response.data?.success) {
-        throw new Error(response.data?.error || response.error?.message || 'Upload failed');
-      }
+      const { data: publicUrlData } = supabase.storage
+        .from('medical_documents')
+        .getPublicUrl(filePath);
 
-      const { id: driveFileId, webViewLink } = response.data;
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) throw new Error('Failed to get public URL for uploaded file');
 
-      // Store in database with Google Drive URL
+      // Store only the URL in the database (file stays in Supabase Storage)
       const { error: dbError } = await supabase.from('documents').insert({
         resident_id: formData.resident_id,
         document_type: formData.document_type,
         file_name: selectedFile.name,
-        file_url: `gdrive:${driveFileId}|${webViewLink}`,
+        file_url: publicUrl,
       });
 
       if (dbError) throw dbError;
 
       toast({
         title: 'Document Uploaded',
-        description: 'The document has been uploaded to Google Drive.',
+        description: 'The document has been uploaded successfully.',
       });
 
       setDialogOpen(false);
