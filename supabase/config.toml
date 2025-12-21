@@ -2,3 +2,6 @@ project_id = "geimemclslezirwtuvkh"
 
 [functions.generate-reminders]
 verify_jwt = false
+
+[functions.upload-to-drive]
+verify_jwt = false
