@@ -130,37 +130,56 @@ export default function Documents() {
     setUploading(true);
 
     try {
-      const fileExt = selectedFile.name.split('.').pop();
-      const fileName = `${formData.resident_id}/${formData.document_type}_${Date.now()}.${fileExt}`;
+      // Convert file to base64
+      const base64Content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
 
-      const { error: uploadError } = await supabase.storage
-        .from('medical_documents')
-        .upload(fileName, selectedFile);
+      const fileName = `${formData.document_type}_${Date.now()}_${selectedFile.name}`;
 
-      if (uploadError) throw uploadError;
+      // Upload to Google Drive via edge function
+      const response = await supabase.functions.invoke('upload-to-drive', {
+        body: {
+          action: 'upload',
+          fileName,
+          fileContent: base64Content,
+          mimeType: selectedFile.type,
+        },
+      });
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('medical_documents')
-        .getPublicUrl(fileName);
+      if (response.error || !response.data?.success) {
+        throw new Error(response.data?.error || response.error?.message || 'Upload failed');
+      }
 
+      const { id: driveFileId, webViewLink } = response.data;
+
+      // Store in database with Google Drive URL
       const { error: dbError } = await supabase.from('documents').insert({
         resident_id: formData.resident_id,
         document_type: formData.document_type,
         file_name: selectedFile.name,
-        file_url: publicUrl,
+        file_url: `gdrive:${driveFileId}|${webViewLink}`,
       });
 
       if (dbError) throw dbError;
 
       toast({
         title: 'Document Uploaded',
-        description: 'The document has been uploaded successfully.',
+        description: 'The document has been uploaded to Google Drive.',
       });
 
       setDialogOpen(false);
       resetForm();
       fetchData();
     } catch (error: any) {
+      console.error('Upload error:', error);
       toast({
         title: 'Upload Failed',
         description: error.message || 'Failed to upload document',
@@ -175,13 +194,30 @@ export default function Documents() {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     try {
-      // Extract file path from URL
-      const urlParts = doc.file_url.split('/');
-      const filePath = urlParts.slice(-2).join('/');
+      // Check if it's a Google Drive file
+      if (doc.file_url.startsWith('gdrive:')) {
+        const fileId = doc.file_url.replace('gdrive:', '').split('|')[0];
+        
+        // Delete from Google Drive
+        const response = await supabase.functions.invoke('upload-to-drive', {
+          body: {
+            action: 'delete',
+            fileId,
+          },
+        });
 
-      await supabase.storage
-        .from('medical_documents')
-        .remove([filePath]);
+        if (response.error || !response.data?.success) {
+          console.warn('Could not delete from Google Drive:', response.data?.error);
+        }
+      } else {
+        // Legacy: Delete from Supabase storage
+        const urlParts = doc.file_url.split('/');
+        const filePath = urlParts.slice(-2).join('/');
+
+        await supabase.storage
+          .from('medical_documents')
+          .remove([filePath]);
+      }
 
       const { error } = await supabase
         .from('documents')
@@ -203,6 +239,13 @@ export default function Documents() {
         variant: 'destructive',
       });
     }
+  };
+
+  const getViewUrl = (fileUrl: string): string => {
+    if (fileUrl.startsWith('gdrive:')) {
+      return fileUrl.split('|')[1] || fileUrl;
+    }
+    return fileUrl;
   };
 
   const resetForm = () => {
@@ -401,7 +444,7 @@ export default function Documents() {
                     variant="outline" 
                     size="sm" 
                     className="flex-1"
-                    onClick={() => window.open(doc.file_url, '_blank')}
+                    onClick={() => window.open(getViewUrl(doc.file_url), '_blank')}
                   >
                     <Eye className="w-4 h-4" />
                     View
