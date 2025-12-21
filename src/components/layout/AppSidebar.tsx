@@ -16,6 +16,7 @@ import {
   X,
   ChevronLeft,
   Home,
+  Receipt,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -24,6 +25,7 @@ const navItems = [
   { path: '/residents', label: 'Residents', icon: Users },
   { path: '/rooms', label: 'Rooms', icon: BedDouble },
   { path: '/payments', label: 'Payments', icon: CreditCard },
+  { path: '/extra-charges', label: 'Extra Charges', icon: Receipt },
   { path: '/food-menu', label: 'Food Menu', icon: UtensilsCrossed },
   { path: '/documents', label: 'Documents', icon: FileText },
   { path: '/reminders', label: 'Reminders', icon: Bell },

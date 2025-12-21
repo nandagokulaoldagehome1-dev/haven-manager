@@ -15,6 +15,7 @@ import ResidentDetail from "./pages/ResidentDetail";
 import ResidentEdit from "./pages/ResidentEdit";
 import Rooms from "./pages/Rooms";
 import Payments from "./pages/Payments";
+import ExtraCharges from "./pages/ExtraCharges";
 import FoodMenu from "./pages/FoodMenu";
 import Documents from "./pages/Documents";
 import Reminders from "./pages/Reminders";
@@ -40,6 +41,7 @@ const App = () => (
             <Route path="/residents/:id/edit" element={<ProtectedRoute><ResidentEdit /></ProtectedRoute>} />
             <Route path="/rooms" element={<ProtectedRoute><Rooms /></ProtectedRoute>} />
             <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
+            <Route path="/extra-charges" element={<ProtectedRoute><ExtraCharges /></ProtectedRoute>} />
             <Route path="/food-menu" element={<ProtectedRoute><FoodMenu /></ProtectedRoute>} />
             <Route path="/documents" element={<ProtectedRoute><Documents /></ProtectedRoute>} />
             <Route path="/reminders" element={<ProtectedRoute><Reminders /></ProtectedRoute>} />
