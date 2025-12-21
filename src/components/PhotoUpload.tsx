@@ -8,6 +8,7 @@ import { PhotoEditor } from '@/components/PhotoEditor';
 const PASSPORT_ASPECT_RATIO = 7 / 9;
 const OUTPUT_WIDTH = 280;
 const OUTPUT_HEIGHT = Math.round(OUTPUT_WIDTH / PASSPORT_ASPECT_RATIO);
+const COMPRESSION_QUALITY = 0.7; // 70% quality for good compression
 
 interface PhotoUploadProps {
   value: string | null;
@@ -70,17 +71,21 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
               reject(new Error('Could not create image blob'));
               return;
             }
+            
+            // Log compression info
+            console.log(`Image compressed: ${(blob.size / 1024).toFixed(1)}KB`);
+            
             const processedFile = new File([blob], `photo_${Date.now()}.jpg`, {
               type: 'image/jpeg',
               lastModified: Date.now(),
             });
             resolve({
               file: processedFile,
-              preview: canvas.toDataURL('image/jpeg', 0.9),
+              preview: canvas.toDataURL('image/jpeg', COMPRESSION_QUALITY),
             });
           },
           'image/jpeg',
-          0.9
+          COMPRESSION_QUALITY
         );
       };
       img.onerror = () => reject(new Error('Could not load image'));
