@@ -21,7 +21,11 @@ import {
   Loader2,
   Mail,
   Trash2,
-  Key
+  Key,
+  HardDrive,
+  ExternalLink,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 
 interface AdminUser {
@@ -32,6 +36,12 @@ interface AdminUser {
   created_at: string;
 }
 
+interface GoogleDriveStatus {
+  connected: boolean;
+  email?: string;
+  expired?: boolean;
+}
+
 export default function Settings() {
   const { isSuper, user } = useAuth();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
@@ -39,14 +49,96 @@ export default function Settings() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
+  const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus>({ connected: false });
+  const [driveLoading, setDriveLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     if (isSuper) {
       fetchAdmins();
+      checkDriveStatus();
     } else {
       setLoading(false);
+      setDriveLoading(false);
     }
   }, [isSuper]);
+
+  const checkDriveStatus = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        'https://geimemclslezirwtuvkh.supabase.co/functions/v1/google-drive-status',
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDriveStatus(data);
+      }
+    } catch (error) {
+      console.error('Error checking drive status:', error);
+    } finally {
+      setDriveLoading(false);
+    }
+  };
+
+  const handleConnectDrive = async () => {
+    setConnecting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast({
+          title: 'Error',
+          description: 'You must be logged in to connect Google Drive',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      const response = await fetch(
+        'https://geimemclslezirwtuvkh.supabase.co/functions/v1/google-drive-auth',
+        {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+      
+      if (!response.ok) {
+        throw new Error('Failed to get auth URL');
+      }
+
+      const { authUrl } = await response.json();
+      
+      // Open popup for OAuth
+      const popup = window.open(authUrl, 'google-drive-auth', 'width=500,height=600');
+      
+      // Poll for popup close to refresh status
+      const pollTimer = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(pollTimer);
+          checkDriveStatus();
+          setConnecting(false);
+        }
+      }, 500);
+    } catch (error: any) {
+      console.error('Error connecting to Drive:', error);
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to connect to Google Drive',
+        variant: 'destructive',
+      });
+      setConnecting(false);
+    }
+  };
 
   const fetchAdmins = async () => {
     try {
@@ -260,6 +352,86 @@ export default function Settings() {
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Google Drive Integration - Only for Super Admin */}
+        {isSuper && (
+          <div className="card-elevated p-6">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-lg font-semibold flex items-center gap-2">
+                  <HardDrive className="w-5 h-5 text-primary" />
+                  Google Drive Integration
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Connect Google Drive for document backup and storage
+                </p>
+              </div>
+            </div>
+
+            {driveLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : driveStatus.connected ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                  <CheckCircle className="w-5 h-5 text-green-500" />
+                  <div className="flex-1">
+                    <p className="font-medium text-green-500">Connected</p>
+                    <p className="text-sm text-muted-foreground">
+                      {driveStatus.email}
+                    </p>
+                  </div>
+                  {driveStatus.expired && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={handleConnectDrive}
+                      disabled={connecting}
+                    >
+                      {connecting ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <ExternalLink className="w-4 h-4" />
+                          Reconnect
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Documents will be automatically backed up to your connected Google Drive account.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+                  <XCircle className="w-5 h-5 text-muted-foreground" />
+                  <div className="flex-1">
+                    <p className="font-medium">Not Connected</p>
+                    <p className="text-sm text-muted-foreground">
+                      Connect your Google Drive to enable document backup
+                    </p>
+                  </div>
+                  <Button 
+                    onClick={handleConnectDrive}
+                    disabled={connecting}
+                  >
+                    {connecting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <>
+                        <ExternalLink className="w-4 h-4" />
+                        Connect Google Drive
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
           </div>
