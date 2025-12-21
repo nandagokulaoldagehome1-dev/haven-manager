@@ -32,6 +32,9 @@ export default function ResidentForm() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
+  const [generatePayment, setGeneratePayment] = useState<boolean>(false);
+  const [paymentMonths, setPaymentMonths] = useState<number>(1);
+  const [rentPaymentDay, setRentPaymentDay] = useState<string>('5');
 
   const [formData, setFormData] = useState({
     // Personal Details
@@ -192,9 +195,55 @@ export default function ResidentForm() {
         }
       }
 
+      // Generate initial payment if requested
+      if (generatePayment && selectedRoomId && selectedRoomId !== 'none' && residentData) {
+        const selectedRoom = rooms.find(r => r.id === selectedRoomId);
+        if (selectedRoom) {
+          const today = new Date();
+          const currentYear = today.getFullYear();
+          const currentMonth = today.getMonth();
+
+          // Create payment records for each month
+          const paymentRecords = [];
+          for (let i = 0; i < paymentMonths; i++) {
+            const paymentDate = new Date(currentYear, currentMonth + i, parseInt(rentPaymentDay));
+            const monthYear = `${paymentDate.getFullYear()}-${String(paymentDate.getMonth() + 1).padStart(2, '0')}`;
+            const receiptNumber = `RCP-${Date.now()}-${i + 1}`;
+
+            paymentRecords.push({
+              resident_id: residentData.id,
+              amount: selectedRoom.base_monthly_charge || 0,
+              payment_date: paymentDate.toISOString().split('T')[0],
+              payment_method: 'cash',
+              month_year: monthYear,
+              receipt_number: receiptNumber,
+              status: 'completed',
+              notes: `Initial payment for ${paymentMonths} month(s) - Month ${i + 1}`,
+            });
+          }
+
+          const { error: paymentError } = await supabase
+            .from('payments')
+            .insert(paymentRecords);
+
+          if (paymentError) {
+            console.error('Error creating payments:', paymentError);
+            toast({
+              title: 'Warning',
+              description: 'Resident added but payment generation failed.',
+              variant: 'destructive',
+            });
+          }
+        }
+      }
+
       toast({
         title: 'Resident Added',
-        description: selectedRoomId && selectedRoomId !== 'none' ? 'Resident added and room assigned.' : 'The resident has been successfully added.',
+        description: generatePayment 
+          ? `Resident added with ${paymentMonths} month(s) payment recorded.` 
+          : selectedRoomId && selectedRoomId !== 'none' 
+            ? 'Resident added and room assigned.' 
+            : 'The resident has been successfully added.',
       });
 
       navigate('/residents');
@@ -240,10 +289,10 @@ export default function ResidentForm() {
           <div className="form-section">
             <h2 className="form-section-title flex items-center gap-2">
               <Home className="w-5 h-5" />
-              Room Assignment
+              Room Assignment & Payment Setup
             </h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
+              <div className="md:col-span-2">
                 <Label>Assign Room (Optional)</Label>
                 <Select
                   value={selectedRoomId}
@@ -256,7 +305,7 @@ export default function ResidentForm() {
                     <SelectItem value="none">No room assignment</SelectItem>
                     {rooms.map((room) => (
                       <SelectItem key={room.id} value={room.id}>
-                        Room {room.room_number} - {room.room_type} ({room.current_occupants}/{room.max_capacity})
+                        Room {room.room_number} - {room.room_type} ({room.current_occupants}/{room.max_capacity}) - ₹{room.base_monthly_charge}/month
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -265,6 +314,74 @@ export default function ResidentForm() {
                   Only rooms with available capacity are shown
                 </p>
               </div>
+
+              {selectedRoomId && selectedRoomId !== 'none' && (
+                <>
+                  <div className="md:col-span-2">
+                    <Label htmlFor="rentPaymentDay">Rent Payment Day of Month</Label>
+                    <div className="grid grid-cols-7 gap-2 mt-2 p-3 border rounded-lg">
+                      {[...Array(31)].map((_, i) => (
+                        <button
+                          key={i + 1}
+                          type="button"
+                          onClick={() => setRentPaymentDay(String(i + 1))}
+                          className={`
+                            h-10 rounded-md text-sm font-medium transition-colors
+                            ${rentPaymentDay === String(i + 1) 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-muted hover:bg-muted/80 text-foreground'
+                            }
+                          `}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Selected: Day {rentPaymentDay} of every month
+                    </p>
+                  </div>
+
+                  <div>
+                    <Label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={generatePayment}
+                        onChange={(e) => setGeneratePayment(e.target.checked)}
+                        className="rounded border-gray-300"
+                      />
+                      Generate Initial Payment
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Record payment for initial months
+                    </p>
+                  </div>
+
+                  {generatePayment && (
+                    <div className="md:col-span-2">
+                      <Label htmlFor="paymentMonths">Number of Months Paying For</Label>
+                      <Select 
+                        value={String(paymentMonths)} 
+                        onValueChange={(value) => setPaymentMonths(Number(value))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {[...Array(12)].map((_, i) => (
+                            <SelectItem key={i + 1} value={String(i + 1)}>
+                              {i + 1} {i === 0 ? 'Month' : 'Months'}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        This will create payment records for {paymentMonths} month(s) at ₹{rooms.find(r => r.id === selectedRoomId)?.base_monthly_charge || 0}/month
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
 

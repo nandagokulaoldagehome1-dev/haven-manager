@@ -141,17 +141,21 @@ export default function FoodMenu() {
     }
   };
 
+  const today = daysOfWeek[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
+
   const shareOnWhatsApp = () => {
-    const menuText = weeklyMenu.map(day => `
-*${day.day_of_week}*
-🌅 Breakfast: ${day.breakfast || 'Not set'}
-☀️ Lunch: ${day.lunch || 'Not set'}
-🍪 Snacks: ${day.evening_snacks || 'Not set'}
-🌙 Dinner: ${day.dinner || 'Not set'}
-    `).join('\n');
+    const todayMenu = weeklyMenu.find(m => m.day_of_week === today);
+
+    const menuText = `
+*${today}*
+🌅 Breakfast: ${todayMenu?.breakfast || 'Not set'}
+☀️ Lunch: ${todayMenu?.lunch || 'Not set'}
+🍪 Snacks: ${todayMenu?.evening_snacks || 'Not set'}
+🌙 Dinner: ${todayMenu?.dinner || 'Not set'}
+    `;
 
     const message = `
-🍽️ *Weekly Food Menu*
+🍽️ *Today's Food Menu*
 ━━━━━━━━━━━━━━━━
 ${menuText}
 ━━━━━━━━━━━━━━━━
@@ -161,8 +165,6 @@ Care Home Management
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
   };
-
-  const today = daysOfWeek[new Date().getDay() === 0 ? 6 : new Date().getDay() - 1];
 
   return (
     <AppLayout>

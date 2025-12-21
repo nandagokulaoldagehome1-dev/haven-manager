@@ -65,6 +65,7 @@ export default function Reminders() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [generatingBirthdays, setGeneratingBirthdays] = useState(false);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -104,10 +105,104 @@ export default function Reminders() {
         .order('full_name');
 
       setResidents(residentsData || []);
+
+      // Auto-delete expired birthday reminders (after birthday has passed)
+      await deleteExpiredBirthdayReminders(formattedReminders);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const deleteExpiredBirthdayReminders = async (allReminders: Reminder[]) => {
+    try {
+      const today = new Date();
+      const birthdayReminders = allReminders.filter(r => r.reminder_type === 'birthday' && r.status === 'pending');
+      
+      for (const reminder of birthdayReminders) {
+        const dueDate = new Date(reminder.due_date);
+        // Delete if birthday has passed (2 days after to account for time zones)
+        if (today > new Date(dueDate.getTime() + 2 * 24 * 60 * 60 * 1000)) {
+          await supabase.from('reminders').delete().eq('id', reminder.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting expired birthday reminders:', error);
+    }
+  };
+
+  const generateBirthdayReminders = async () => {
+    setGeneratingBirthdays(true);
+    try {
+      const today = new Date();
+      const futureDate = new Date(today.getTime() + 60 * 24 * 60 * 60 * 1000); // 60 days from now
+      
+      let createdCount = 0;
+
+      for (const resident of residents) {
+        if (!resident.date_of_birth) continue;
+
+        // Parse date of birth
+        const dob = new Date(resident.date_of_birth);
+        const dobMonth = dob.getMonth();
+        const dobDate = dob.getDate();
+
+        // Find upcoming birthday (this year or next year)
+        let birthdayThisYear = new Date(today.getFullYear(), dobMonth, dobDate);
+        
+        if (birthdayThisYear < today) {
+          birthdayThisYear = new Date(today.getFullYear() + 1, dobMonth, dobDate);
+        }
+
+        // Check if birthday is within 60 days
+        if (birthdayThisYear <= futureDate) {
+          // Check if reminder already exists
+          const existingReminder = reminders.find(
+            r => r.reminder_type === 'birthday' && 
+                 r.resident_id === resident.id && 
+                 r.status === 'pending' &&
+                 r.due_date === birthdayThisYear.toISOString().split('T')[0]
+          );
+
+          if (!existingReminder) {
+            const age = birthdayThisYear.getFullYear() - dob.getFullYear();
+            
+            const { error } = await supabase.from('reminders').insert({
+              title: `${resident.full_name}'s Birthday`,
+              description: `Birthday coming up - will turn ${age} years old`,
+              reminder_type: 'birthday',
+              due_date: birthdayThisYear.toISOString().split('T')[0],
+              resident_id: resident.id,
+              status: 'pending',
+            });
+
+            if (!error) createdCount++;
+          }
+        }
+      }
+
+      if (createdCount > 0) {
+        toast({
+          title: 'Birthday Reminders Generated',
+          description: `Created ${createdCount} birthday reminder(s) for the next 60 days.`,
+        });
+      } else {
+        toast({
+          title: 'No New Reminders',
+          description: 'All upcoming birthday reminders are already created.',
+        });
+      }
+
+      fetchData();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to generate birthday reminders',
+        variant: 'destructive',
+      });
+    } finally {
+      setGeneratingBirthdays(false);
     }
   };
 
@@ -235,100 +330,110 @@ export default function Reminders() {
             <h1 className="page-title">Reminders</h1>
             <p className="page-description">Track important dates and tasks</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4" />
-                Add Reminder
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle>Create Reminder</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-                <div>
-                  <Label htmlFor="title">Title</Label>
-                  <Input
-                    id="title"
-                    value={formData.title}
-                    onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="Reminder title"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Type</Label>
-                  <Select 
-                    value={formData.reminder_type} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, reminder_type: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {reminderTypes.map(type => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="due_date">Due Date</Label>
-                  <Input
-                    id="due_date"
-                    type="date"
-                    value={formData.due_date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div>
-                  <Label>Resident (Optional)</Label>
-                  <Select 
-                    value={formData.resident_id} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, resident_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select resident" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No specific resident</SelectItem>
-                      {residents.map(resident => (
-                        <SelectItem key={resident.id} value={resident.id}>
-                          {resident.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    value={formData.description}
-                    onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Additional details"
-                    rows={2}
-                  />
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={saving}>
-                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Create Reminder
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button 
+              onClick={generateBirthdayReminders}
+              disabled={generatingBirthdays}
+              variant="outline"
+            >
+              {generatingBirthdays && <Loader2 className="w-4 h-4 animate-spin" />}
+              Generate Birthday Reminders
+            </Button>
+            <Dialog open={dialogOpen} onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4" />
+                  Add Reminder
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Create Reminder</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+                  <div>
+                    <Label htmlFor="title">Title</Label>
+                    <Input
+                      id="title"
+                      value={formData.title}
+                      onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
+                      placeholder="Reminder title"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label>Type</Label>
+                    <Select 
+                      value={formData.reminder_type} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, reminder_type: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {reminderTypes.map(type => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="due_date">Due Date</Label>
+                    <Input
+                      id="due_date"
+                      type="date"
+                      value={formData.due_date}
+                      onChange={(e) => setFormData(prev => ({ ...prev, due_date: e.target.value }))}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label>Resident (Optional)</Label>
+                    <Select 
+                      value={formData.resident_id} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, resident_id: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select resident" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No specific resident</SelectItem>
+                        {residents.map(resident => (
+                          <SelectItem key={resident.id} value={resident.id}>
+                            {resident.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="description">Description</Label>
+                    <Textarea
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Additional details"
+                      rows={2}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={saving}>
+                      {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Create Reminder
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
@@ -425,8 +530,8 @@ export default function Reminders() {
                       </div>
                     </div>
 
-                    {reminder.status === 'pending' && (
-                      <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {reminder.status === 'pending' && (
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -434,16 +539,16 @@ export default function Reminders() {
                         >
                           <Check className="w-4 h-4" />
                         </Button>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleDelete(reminder.id)}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    )}
+                      )}
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleDelete(reminder.id)}
+                        className="text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               );

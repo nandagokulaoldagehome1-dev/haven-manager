@@ -22,6 +22,16 @@ interface DashboardStats {
   birthdaysThisMonth: number;
 }
 
+interface DashboardAlert {
+  id: string;
+  title: string;
+  description: string;
+  reminder_type: string;
+  due_date: string;
+  status: string;
+  resident_name?: string;
+}
+
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({
     totalResidents: 0,
@@ -32,6 +42,7 @@ export default function Dashboard() {
   });
   const [loading, setLoading] = useState(true);
   const [recentResidents, setRecentResidents] = useState<any[]>([]);
+  const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -65,21 +76,69 @@ export default function Dashboard() {
         .order('created_at', { ascending: false })
         .limit(5);
 
-      // Fetch birthdays this month
-      const currentMonth = new Date().getMonth() + 1;
-      const { count: birthdayCount } = await supabase
+      // Fetch residents to compute birthdays this month
+      const { data: residentsForBirthdays } = await supabase
         .from('residents')
-        .select('*', { count: 'exact', head: true })
+        .select('id, full_name, date_of_birth')
         .eq('status', 'active');
-        // Note: We'd need to filter by birth month in a real query
+
+      const now = new Date();
+      const currentMonthIdx = now.getMonth();
+      const birthdayCount = (residentsForBirthdays || []).filter(r => {
+        if (!r.date_of_birth) return false;
+        const dob = new Date(r.date_of_birth);
+        return dob.getMonth() === currentMonthIdx;
+      }).length;
+
+      // Fetch pending reminders for alerts (overdue, due today, next 7 days)
+      const { data: remindersData } = await supabase
+        .from('reminders')
+        .select(`
+          *,
+          residents (full_name)
+        `)
+        .eq('status', 'pending')
+        .order('due_date', { ascending: true });
+
+      const today = new Date();
+      const next7 = new Date(today);
+      next7.setDate(today.getDate() + 7);
+
+      const dynamicAlerts: DashboardAlert[] = (remindersData || [])
+        .filter((r: any) => {
+          const due = new Date(r.due_date);
+          return due <= next7; // include overdue, today, and upcoming 7 days
+        })
+        .slice(0, 6) // limit to top alerts
+        .map((r: any) => ({
+          id: r.id,
+          title: r.title,
+          description: r.description,
+          reminder_type: r.reminder_type,
+          due_date: r.due_date,
+          status: r.status,
+          resident_name: r.residents?.full_name,
+        }));
+
+      // Compute pending payments count from payment reminders for this month
+      const currentYear = today.getFullYear();
+      const currentMonth = today.getMonth() + 1;
+      const monthStart = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
+      const monthEnd = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+
+      const pendingPaymentCount = (remindersData || []).filter((r: any) => {
+        return r.reminder_type === 'payment' && r.status === 'pending' && r.due_date >= monthStart && r.due_date <= monthEnd;
+      }).length;
 
       setStats({
         totalResidents: residentsCount || 0,
         totalRooms: roomsCount || 0,
         occupiedRooms: occupiedCount || 0,
-        pendingPayments: 0, // Would need payment logic
+        pendingPayments: pendingPaymentCount,
         birthdaysThisMonth: birthdayCount || 0,
       });
+
+      setAlerts(dynamicAlerts);
 
       setRecentResidents(recent || []);
     } catch (error) {
@@ -124,11 +183,24 @@ export default function Dashboard() {
     <AppLayout>
       <div className="space-y-6">
         {/* Page Header */}
-        <div className="page-header">
-          <h1 className="page-title">Dashboard</h1>
-          <p className="page-description">
-            Overview of your old age home management system
-          </p>
+        <div className="card-elevated p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-background border border-primary/10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="page-title mb-1">Dashboard</h1>
+              <p className="page-description">Stay ahead of rooms, payments, and care reminders.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="default" onClick={() => navigate('/residents/new')}>
+                Add Resident
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/reminders')}>
+                View Reminders
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => navigate('/payments')}>
+                Payments
+              </Button>
+            </div>
+          </div>
         </div>
 
         {/* Stats Grid */}
@@ -136,7 +208,7 @@ export default function Dashboard() {
           {statCards.map((stat, index) => (
             <div 
               key={stat.label} 
-              className="stat-card animate-slide-up"
+              className="stat-card animate-slide-up border border-border/60 hover:border-primary/40 shadow-sm hover:shadow-md transition-all"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div className="flex items-center justify-between">
@@ -145,141 +217,45 @@ export default function Dashboard() {
                 </div>
                 <span className="stat-value">{stat.value}</span>
               </div>
-              <p className="stat-label">{stat.label}</p>
+              <p className="stat-label text-muted-foreground/80">{stat.label}</p>
             </div>
           ))}
         </div>
 
-        {/* Quick Actions & Alerts */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Quick Actions */}
-          <div className="lg:col-span-2 card-elevated p-6">
-            <h2 className="text-lg font-semibold mb-4">Quick Actions</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <Button 
-                variant="outline" 
-                className="h-auto py-4 flex-col gap-2"
-                onClick={() => navigate('/residents/new')}
-              >
-                <Users className="w-5 h-5" />
-                <span className="text-xs">Add Resident</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-auto py-4 flex-col gap-2"
-                onClick={() => navigate('/rooms')}
-              >
-                <BedDouble className="w-5 h-5" />
-                <span className="text-xs">Manage Rooms</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-auto py-4 flex-col gap-2"
-                onClick={() => navigate('/payments')}
-              >
-                <CreditCard className="w-5 h-5" />
-                <span className="text-xs">View Payments</span>
-              </Button>
-              <Button 
-                variant="outline" 
-                className="h-auto py-4 flex-col gap-2"
-                onClick={() => navigate('/food-menu')}
-              >
-                <Calendar className="w-5 h-5" />
-                <span className="text-xs">Food Menu</span>
-              </Button>
-            </div>
-          </div>
-
-          {/* Alerts Card */}
-          <div className="card-elevated p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+        {/* Alerts - full width */}
+        <div className="card-elevated p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center gap-2">
               <Bell className="w-5 h-5 text-warning" />
               Alerts
             </h2>
-            <div className="space-y-3">
-              {stats.birthdaysThisMonth > 0 && (
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-accent/10">
-                  <Cake className="w-5 h-5 text-accent flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Birthdays This Month</p>
-                    <p className="text-xs text-muted-foreground">
-                      {stats.birthdaysThisMonth} resident(s) have birthdays
-                    </p>
-                  </div>
-                </div>
-              )}
-              {stats.pendingPayments > 0 && (
-                <div className="flex items-start gap-3 p-3 rounded-lg bg-warning/10">
-                  <AlertCircle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Pending Payments</p>
-                    <p className="text-xs text-muted-foreground">
-                      {stats.pendingPayments} payment(s) pending
-                    </p>
-                  </div>
-                </div>
-              )}
-              {stats.birthdaysThisMonth === 0 && stats.pendingPayments === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No alerts at this time
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Residents */}
-        <div className="card-elevated p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Recent Residents</h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/residents')}>
-              View All
+            <Button variant="ghost" size="sm" onClick={() => navigate('/reminders')}>
+              View All Reminders
             </Button>
           </div>
-          
-          {recentResidents.length > 0 ? (
-            <div className="space-y-3">
-              {recentResidents.map((resident) => (
-                <div 
-                  key={resident.id}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/residents/${resident.id}`)}
-                >
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    {resident.photo_url ? (
-                      <img 
-                        src={resident.photo_url} 
-                        alt={resident.full_name}
-                        className="w-10 h-10 rounded-full object-cover"
-                      />
-                    ) : (
-                      <Users className="w-5 h-5 text-primary" />
-                    )}
+          <div className="space-y-3">
+            {alerts.length > 0 ? (
+              alerts.map((alert) => {
+                const due = new Date(alert.due_date);
+                const isOverdue = due < new Date() && due.toDateString() !== new Date().toDateString();
+                const isToday = due.toDateString() === new Date().toDateString();
+                const bg = isOverdue ? 'bg-destructive/10' : isToday ? 'bg-warning/10' : 'bg-accent/10';
+                const Icon = alert.reminder_type === 'birthday' ? Cake : alert.reminder_type === 'payment' ? CreditCard : AlertCircle;
+                return (
+                  <div key={alert.id} className={`flex items-start gap-3 p-4 rounded-lg ${bg}`}>
+                    <Icon className={`w-5 h-5 ${isOverdue ? 'text-destructive' : isToday ? 'text-warning' : 'text-accent'} flex-shrink-0 mt-0.5`} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{alert.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{alert.description}{alert.resident_name ? ` • ${alert.resident_name}` : ''}</p>
+                      <p className="text-xs text-muted-foreground">Due: {due.toLocaleDateString()}</p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{resident.full_name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Added {new Date(resident.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8">
-              <Users className="w-12 h-12 text-muted-foreground/50 mx-auto mb-3" />
-              <p className="text-muted-foreground">No residents yet</p>
-              <Button 
-                variant="default" 
-                size="sm" 
-                className="mt-3"
-                onClick={() => navigate('/residents/new')}
-              >
-                Add First Resident
-              </Button>
-            </div>
-          )}
+                );
+              })
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">No alerts at this time</p>
+            )}
+          </div>
         </div>
       </div>
     </AppLayout>

@@ -75,10 +75,14 @@ export default function Payments() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMonth, setFilterMonth] = useState('');
+  const [filterMonth, setFilterMonth] = useState('all');
+  const [filterYear, setFilterYear] = useState('all');
+  const [filterResident, setFilterResident] = useState('all');
   const [selectedResidentCharges, setSelectedResidentCharges] = useState<ExtraCharge[]>([]);
   const [loadingCharges, setLoadingCharges] = useState(false);
   const [expandedPayment, setExpandedPayment] = useState<string | null>(null);
+  const [monthsCount, setMonthsCount] = useState<number>(1);
+  const [monthlyRate, setMonthlyRate] = useState<number | null>(null);
 
   const [formData, setFormData] = useState({
     resident_id: '',
@@ -100,6 +104,52 @@ export default function Payments() {
       setSelectedResidentCharges([]);
     }
   }, [formData.resident_id]);
+
+  useEffect(() => {
+    async function fetchMonthlyRate(residentId: string) {
+      try {
+        // Get current room assignment
+        const { data: assignment } = await supabase
+          .from('room_assignments')
+          .select('room_id')
+          .eq('resident_id', residentId)
+          .is('end_date', null)
+          .single();
+
+        if (!assignment?.room_id) {
+          setMonthlyRate(null);
+          return;
+        }
+
+        const { data: room } = await supabase
+          .from('rooms')
+          .select('base_monthly_charge')
+          .eq('id', assignment.room_id)
+          .single();
+
+        if (room?.base_monthly_charge != null) {
+          setMonthlyRate(Number(room.base_monthly_charge));
+        } else {
+          setMonthlyRate(null);
+        }
+      } catch (e) {
+        setMonthlyRate(null);
+      }
+    }
+
+    if (formData.resident_id) {
+      fetchMonthlyRate(formData.resident_id);
+    } else {
+      setMonthlyRate(null);
+    }
+  }, [formData.resident_id]);
+
+  useEffect(() => {
+    if (monthlyRate != null) {
+      const computed = monthlyRate * monthsCount;
+      setFormData(prev => ({ ...prev, amount: String(computed) }));
+    }
+  }, [monthlyRate, monthsCount]);
 
   const fetchData = async () => {
     try {
@@ -199,7 +249,7 @@ export default function Payments() {
           month_year: formData.month_year,
           receipt_number: receiptNumber,
           status: 'completed',
-          notes: formData.notes,
+          notes: `${formData.notes || ''}${monthsCount > 1 ? (formData.notes ? ' ' : '') + `(Months: ${monthsCount})` : ''}`,
         })
         .select()
         .single();
@@ -262,31 +312,68 @@ export default function Payments() {
     setSelectedResidentCharges([]);
   };
 
-  const shareOnWhatsApp = (payment: Payment) => {
-    let message = `
+  const shareOnWhatsApp = async (payment: Payment) => {
+    try {
+      // Generate PDF
+      const doc = generateReceiptPDF({
+        receiptNumber: payment.receipt_number,
+        residentName: payment.resident_name || 'Unknown',
+        paymentDate: payment.payment_date,
+        monthYear: payment.month_year,
+        paymentMethod: payment.payment_method,
+        baseAmount: payment.base_amount || payment.amount,
+        extraCharges: payment.extra_charges || [],
+        totalAmount: payment.amount,
+        notes: payment.notes,
+      });
+
+      // Convert PDF to blob
+      const pdfBlob = doc.output('blob');
+      const fileName = `Receipt_${payment.receipt_number}.pdf`;
+      
+      // Create a File object from the blob
+      const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
+
+      // Check if Web Share API is supported
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          title: `Payment Receipt - ${payment.resident_name}`,
+          text: `Receipt #${payment.receipt_number} for ₹${payment.amount.toLocaleString()}`,
+          files: [pdfFile],
+        });
+      } else {
+        // Fallback: Open WhatsApp Web with text message and download PDF
+        const message = `
 🧾 *Payment Receipt*
 ━━━━━━━━━━━━━━━
 Receipt #: ${payment.receipt_number}
 Resident: ${payment.resident_name}
+Amount: ₹${payment.amount.toLocaleString()}
 Date: ${new Date(payment.payment_date).toLocaleDateString()}
 For Month: ${payment.month_year}
-Method: ${payment.payment_method}
 ━━━━━━━━━━━━━━━
-`;
-    
-    if (payment.extra_charges && payment.extra_charges.length > 0) {
-      message += `\nBase Charges: ₹${payment.base_amount?.toLocaleString()}\n`;
-      message += `\n*Additional Charges:*\n`;
-      payment.extra_charges.forEach(charge => {
-        message += `• ${charge.description}: ₹${Number(charge.amount).toLocaleString()}\n`;
-      });
-      message += `━━━━━━━━━━━━━━━\n`;
-    }
-    
-    message += `*Total: ₹${payment.amount.toLocaleString()}*\n━━━━━━━━━━━━━━━\nThank you for your payment!`;
+PDF receipt downloading separately...`;
 
-    const url = `https://wa.me/?text=${encodeURIComponent(message.trim())}`;
-    window.open(url, '_blank');
+        // Download PDF for manual sharing
+        doc.save(fileName);
+        
+        // Open WhatsApp with message
+        const url = `https://wa.me/?text=${encodeURIComponent(message.trim())}`;
+        window.open(url, '_blank');
+        
+        toast({
+          title: 'PDF Downloaded',
+          description: 'Please attach the downloaded PDF to WhatsApp manually.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error sharing receipt:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to share receipt. Please try downloading instead.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const handleDownloadPDF = (payment: Payment) => {
@@ -328,20 +415,28 @@ Method: ${payment.payment_method}
   const filteredPayments = payments.filter(payment => {
     const matchesSearch = payment.resident_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       payment.receipt_number.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesMonth = !filterMonth || filterMonth === 'all' || payment.month_year === filterMonth;
-    return matchesSearch && matchesMonth;
+    const [paymentYear, paymentMonth] = payment.month_year.split('-');
+    const matchesMonth = filterMonth === 'all' || paymentMonth === filterMonth;
+    const matchesYear = filterYear === 'all' || paymentYear === filterYear;
+    const matchesResident = filterResident === 'all' || payment.resident_id === filterResident;
+    return matchesSearch && matchesMonth && matchesYear && matchesResident;
   });
 
   const getMonthOptions = () => {
-    const months = [];
-    const date = new Date();
-    for (let i = 0; i < 12; i++) {
-      const d = new Date(date.getFullYear(), date.getMonth() - i, 1);
-      const value = `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}`;
-      const label = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-      months.push({ value, label });
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return months.map((month, index) => ({
+      value: (index + 1).toString().padStart(2, '0'),
+      label: month
+    }));
+  };
+
+  const getYearOptions = () => {
+    const years = [];
+    const currentYear = new Date().getFullYear();
+    for (let i = 0; i < 5; i++) {
+      years.push(currentYear - i);
     }
-    return months;
+    return years;
   };
 
   return (
@@ -520,8 +615,8 @@ Method: ${payment.payment_method}
         </div>
 
         {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1 max-w-md">
+        <div className="flex flex-col sm:flex-row gap-4 items-end">
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               placeholder="Search by name or receipt..."
@@ -530,15 +625,41 @@ Method: ${payment.payment_method}
               className="pl-10"
             />
           </div>
-          <Select value={filterMonth} onValueChange={setFilterMonth}>
+          <Select value={filterResident} onValueChange={setFilterResident}>
             <SelectTrigger className="w-full sm:w-48">
-              <SelectValue placeholder="Filter by month" />
+              <SelectValue placeholder="All Residents" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Residents</SelectItem>
+              {residents.map(resident => (
+                <SelectItem key={resident.id} value={resident.id}>
+                  {resident.full_name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterMonth} onValueChange={setFilterMonth}>
+            <SelectTrigger className="w-full sm:w-40">
+              <SelectValue placeholder="Month" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Months</SelectItem>
               {getMonthOptions().map(month => (
                 <SelectItem key={month.value} value={month.value}>
                   {month.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterYear} onValueChange={setFilterYear}>
+            <SelectTrigger className="w-full sm:w-32">
+              <SelectValue placeholder="Year" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Years</SelectItem>
+              {getYearOptions().map(year => (
+                <SelectItem key={year} value={year.toString()}>
+                  {year}
                 </SelectItem>
               ))}
             </SelectContent>

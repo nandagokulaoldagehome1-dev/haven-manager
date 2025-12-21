@@ -60,6 +60,13 @@ This project is built with:
 - shadcn-ui
 - Tailwind CSS
 
+## Google Drive Uploads
+
+- Edge function: supabase/functions/upload-to-drive/index.ts handles Google Drive uploads.
+- Folder: documents are stored in a Drive folder named "Residents-Documents" (auto-created if missing).
+- Service account: set an environment variable `GOOGLE_SERVICE_ACCOUNT_JSON` with the JSON key for your Google Cloud service account.
+- Google Cloud: the project associated with the service account should be named "My First Project" in Google Cloud Console.
+
 ## How can I deploy this project?
 
 Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.

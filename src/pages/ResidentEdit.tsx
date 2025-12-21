@@ -13,8 +13,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
-import { ArrowLeft, Loader2, User, Users, Heart, Phone, Home } from 'lucide-react';
+import { ArrowLeft, Loader2, User, Users, Heart, Phone, Home, Trash2 } from 'lucide-react';
 import { PhotoUpload } from '@/components/PhotoUpload';
 
 interface Room {
@@ -30,11 +39,14 @@ export default function ResidentEdit() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [currentRoomAssignmentId, setCurrentRoomAssignmentId] = useState<string | null>(null);
+  const [previousRoomId, setPreviousRoomId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -161,6 +173,7 @@ export default function ResidentEdit() {
     if (data) {
       setSelectedRoomId(data.room_id);
       setCurrentRoomAssignmentId(data.id);
+      setPreviousRoomId(data.room_id);
     }
   };
 
@@ -238,7 +251,7 @@ export default function ResidentEdit() {
       if (error) throw error;
 
       // Handle room assignment changes
-      if (selectedRoomId !== (currentRoomAssignmentId ? rooms.find(r => r.id === selectedRoomId)?.id : '')) {
+      if (selectedRoomId !== previousRoomId) {
         // End current assignment if exists
         if (currentRoomAssignmentId) {
           await supabase
@@ -254,6 +267,40 @@ export default function ResidentEdit() {
             room_id: selectedRoomId,
             start_date: new Date().toISOString().split('T')[0],
           });
+
+          // Auto-update base payments with new room's rate
+          const newRoom = rooms.find(r => r.id === selectedRoomId);
+          if (newRoom) {
+            const { data: monthlyRate } = await supabase
+              .from('rooms')
+              .select('base_monthly_charge')
+              .eq('id', selectedRoomId)
+              .single();
+
+            if (monthlyRate && monthlyRate.base_monthly_charge) {
+              // Get all pending payments for this resident
+              const { data: payments } = await supabase
+                .from('payments')
+                .select('id, month_year')
+                .eq('resident_id', id)
+                .eq('status', 'pending');
+
+              // Update base_amount for all pending payments
+              if (payments && payments.length > 0) {
+                for (const payment of payments) {
+                  await supabase
+                    .from('payments')
+                    .update({ base_amount: monthlyRate.base_monthly_charge })
+                    .eq('id', payment.id);
+                }
+
+                toast({
+                  title: 'Room Reassigned',
+                  description: `Updated base payment amount to ₹${monthlyRate.base_monthly_charge.toLocaleString()} for all pending payments.`,
+                });
+              }
+            }
+          }
         }
       }
 
@@ -271,6 +318,65 @@ export default function ResidentEdit() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteResident = async () => {
+    setDeleting(true);
+    try {
+      // Delete room assignments
+      await supabase
+        .from('room_assignments')
+        .delete()
+        .eq('resident_id', id);
+
+      // Delete payments
+      await supabase
+        .from('payments')
+        .delete()
+        .eq('resident_id', id);
+
+      // Delete extra charges
+      await supabase
+        .from('resident_extra_charges')
+        .delete()
+        .eq('resident_id', id);
+
+      // Delete documents
+      await supabase
+        .from('documents')
+        .delete()
+        .eq('resident_id', id);
+
+      // Delete reminders
+      await supabase
+        .from('reminders')
+        .delete()
+        .eq('resident_id', id);
+
+      // Delete resident
+      const { error } = await supabase
+        .from('residents')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Resident Deleted',
+        description: 'Resident and all associated data have been removed.',
+      });
+
+      navigate('/residents');
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to delete resident',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleting(false);
+      setShowDeleteDialog(false);
     }
   };
 
@@ -635,16 +741,55 @@ export default function ResidentEdit() {
           </div>
 
           {/* Submit */}
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={() => navigate(`/residents/${id}`)}>
-              Cancel
+          <div className="flex justify-between items-center gap-3">
+            <Button 
+              type="button" 
+              variant="destructive" 
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className="w-4 h-4" />
+              Delete Resident
             </Button>
-            <Button type="submit" disabled={saving}>
-              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Save Changes
-            </Button>
+            <div className="flex gap-3">
+              <Button type="button" variant="outline" onClick={() => navigate(`/residents/${id}`)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving}>
+                {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                Save Changes
+              </Button>
+            </div>
           </div>
         </form>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Resident?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete {formData.full_name} and all associated data including:
+                <ul className="mt-2 ml-4 space-y-1 list-disc text-sm">
+                  <li>Room assignments</li>
+                  <li>Payment records</li>
+                  <li>Extra charges</li>
+                  <li>Documents</li>
+                  <li>Reminders</li>
+                </ul>
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteResident}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </AppLayout>
   );
