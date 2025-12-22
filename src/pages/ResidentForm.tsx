@@ -241,7 +241,7 @@ export default function ResidentForm() {
       toast({
         title: 'Resident Added',
         description: generatePayment 
-          ? `Resident added with ${paymentMonths} month(s) payment recorded.` 
+          ? `Resident added${generatePayment && paymentMonths > 0 ? ` with ${paymentMonths} month(s) payment recorded.` : '.'}` 
           : selectedRoomId && selectedRoomId !== 'none' 
             ? 'Resident added and room assigned.' 
             : 'The resident has been successfully added.',
@@ -369,6 +369,7 @@ export default function ResidentForm() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="0">0 Months (No Advance Payment)</SelectItem>
                           {[...Array(12)].map((_, i) => (
                             <SelectItem key={i + 1} value={String(i + 1)}>
                               {i + 1} {i === 0 ? 'Month' : 'Months'}
@@ -377,7 +378,9 @@ export default function ResidentForm() {
                         </SelectContent>
                       </Select>
                       <p className="text-xs text-muted-foreground mt-1">
-                        This will create payment records for {paymentMonths} month(s) at ₹{rooms.find(r => r.id === selectedRoomId)?.base_monthly_charge || 0}/month
+                        {paymentMonths === 0 
+                          ? 'No payment records will be created for this resident.' 
+                          : `This will create payment records for ${paymentMonths} month(s) at ₹${rooms.find(r => r.id === selectedRoomId)?.base_monthly_charge || 0}/month`}
                       </p>
                     </div>
                   )}

@@ -334,38 +334,55 @@ export default function Payments() {
       // Create a File object from the blob
       const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
-      // Check if Web Share API is supported
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
-        await navigator.share({
-          title: `Payment Receipt - ${payment.resident_name}`,
-          text: `Receipt #${payment.receipt_number} for ₹${payment.amount.toLocaleString()}`,
-          files: [pdfFile],
-        });
-      } else {
-        // Fallback: Open WhatsApp Web with text message and download PDF
-        const message = `
-🧾 *Payment Receipt*
-━━━━━━━━━━━━━━━
-Receipt #: ${payment.receipt_number}
-Resident: ${payment.resident_name}
-Amount: ₹${payment.amount.toLocaleString()}
-Date: ${new Date(payment.payment_date).toLocaleDateString()}
-For Month: ${payment.month_year}
-━━━━━━━━━━━━━━━
-PDF receipt downloading separately...`;
-
-        // Download PDF for manual sharing
-        doc.save(fileName);
-        
-        // Open WhatsApp with message
-        const url = `https://wa.me/?text=${encodeURIComponent(message.trim())}`;
-        window.open(url, '_blank');
-        
-        toast({
-          title: 'PDF Downloaded',
-          description: 'Please attach the downloaded PDF to WhatsApp manually.',
-        });
+      // Try to use Web Share API (available on mobile browsers)
+      if (navigator.share) {
+        try {
+          // Try sharing with file first (for mobile devices)
+          await navigator.share({
+            title: `Payment Receipt - ${payment.resident_name}`,
+            text: `Receipt #${payment.receipt_number} for ₹${payment.amount.toLocaleString()}`,
+            files: [pdfFile],
+          });
+          return; // Successfully shared
+        } catch (error: any) {
+          // If file sharing fails, try sharing text only
+          if (error.name !== 'AbortError' && error.name !== 'NotAllowedError') {
+            console.log('File sharing not supported, trying text-only share');
+            try {
+              await navigator.share({
+                title: `Payment Receipt - ${payment.resident_name}`,
+                text: `Receipt #${payment.receipt_number}\nAmount: ₹${payment.amount.toLocaleString()}\nDate: ${new Date(payment.payment_date).toLocaleDateString()}`,
+              });
+              // Also download PDF
+              doc.save(fileName);
+              toast({
+                title: 'Shared & Downloaded',
+                description: 'Receipt shared and PDF downloaded.',
+              });
+              return;
+            } catch (textError: any) {
+              if (textError.name === 'AbortError') {
+                console.log('User cancelled share');
+                return;
+              }
+              throw textError;
+            }
+          } else if (error.name === 'AbortError') {
+            // User cancelled, don't show error
+            console.log('User cancelled share');
+            return;
+          }
+          throw error;
+        }
       }
+
+      // Fallback only if Share API is not available: Just download the PDF
+      doc.save(fileName);
+      toast({
+        title: 'PDF Downloaded',
+        description: 'Receipt saved. You can share it from your file manager.',
+      });
+
     } catch (error: any) {
       console.error('Error sharing receipt:', error);
       toast({

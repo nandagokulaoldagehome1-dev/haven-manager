@@ -89,31 +89,63 @@ serve(async (req) => {
       }
     }
 
-    // Process payment reminders (on 1st of month or within first 5 days)
-    if (currentDay <= 5) {
-      const monthYear = `${today.toLocaleString("en-US", { month: "long" })} ${currentYear}`;
+    // Process payment reminders based on resident's initial payment date
+    // Get all residents with their first payment date
+    const { data: paymentData, error: paymentError } = await supabase
+      .from("payments")
+      .select("resident_id, payment_date")
+      .order("payment_date", { ascending: true })
+      .limit(1000);
+
+    if (paymentError) {
+      console.error("Error fetching payment data:", paymentError);
+      throw paymentError;
+    }
+
+    // Group payments by resident and get their earliest payment date
+    const residentPaymentDateMap = new Map<string, Date>();
+    paymentData?.forEach(payment => {
+      if (!residentPaymentDateMap.has(payment.resident_id)) {
+        residentPaymentDateMap.set(payment.resident_id, new Date(payment.payment_date));
+      }
+    });
+
+    // Generate reminders based on the payment day of the month
+    for (const resident of residents || []) {
+      const firstPaymentDate = residentPaymentDateMap.get(resident.id);
       
-      for (const resident of residents || []) {
-        // Check if payment reminder already exists for this month
+      if (!firstPaymentDate) {
+        console.log(`No payment history found for resident ${resident.full_name}`);
+        continue;
+      }
+
+      const paymentDayOfMonth = firstPaymentDate.getDate();
+      const daysInCurrentMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+      const reminderDay = Math.min(paymentDayOfMonth, daysInCurrentMonth);
+
+      // Check if today is the reminder day
+      if (currentDay === reminderDay) {
+        // Check if reminder already exists for this month
         const { data: existingPaymentReminder } = await supabase
           .from("reminders")
           .select("id")
           .eq("resident_id", resident.id)
           .eq("reminder_type", "payment")
           .gte("due_date", `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-01`)
-          .lte("due_date", `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-28`)
+          .lte("due_date", `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${daysInCurrentMonth}`)
           .single();
 
         if (!existingPaymentReminder) {
+          const monthYear = `${today.toLocaleString("en-US", { month: "long" })} ${currentYear}`;
           remindersToCreate.push({
             title: `Payment Due - ${resident.full_name}`,
-            description: `Monthly payment due for ${monthYear}`,
+            description: `Monthly payment due for ${monthYear}. Based on payment cycle starting on ${paymentDayOfMonth}${['st', 'nd', 'rd'][((paymentDayOfMonth % 10) - 1)] || 'th'} of month.`,
             reminder_type: "payment",
-            due_date: `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-05`,
+            due_date: `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(reminderDay).padStart(2, "0")}`,
             resident_id: resident.id,
             status: "pending",
           });
-          console.log(`Creating payment reminder for ${resident.full_name}`);
+          console.log(`Creating payment reminder for ${resident.full_name} on day ${reminderDay}`);
         }
       }
     }
