@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -6,12 +7,16 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-type DriveConfigRow = {
+const ROOT_FOLDER_NAME = "Residents-Documents";
+
+interface DriveConfigRow {
+  id: string;
   access_token: string;
   refresh_token: string;
   token_expiry: string;
   user_email: string | null;
-};
+  root_folder_id: string | null;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -26,8 +31,7 @@ async function refreshAccessToken(params: {
   clientId: string;
   clientSecret: string;
   refreshToken: string;
-}): Promise<{ access_token: string; expires_in: number }>
-{
+}): Promise<{ access_token: string; expires_in: number }> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -48,14 +52,14 @@ async function refreshAccessToken(params: {
   return { access_token: data.access_token, expires_in: data.expires_in || 3600 };
 }
 
-async function getValidDriveAccessToken(supabaseAdmin: any): Promise<string> {
+async function getValidDriveConfig(supabaseAdmin: any): Promise<{ accessToken: string; configId: string; rootFolderId: string | null }> {
   const clientId = Deno.env.get("GOOGLE_CLIENT_ID");
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
   if (!clientId || !clientSecret) throw new Error("Missing GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET secrets");
 
   const { data, error } = await supabaseAdmin
     .from("google_drive_config")
-    .select("access_token, refresh_token, token_expiry, user_email")
+    .select("id, access_token, refresh_token, token_expiry, user_email, root_folder_id")
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -66,31 +70,33 @@ async function getValidDriveAccessToken(supabaseAdmin: any): Promise<string> {
   }
 
   const cfg = data as DriveConfigRow;
+  let accessToken = cfg.access_token;
 
-  if (!isExpiredSoon(cfg.token_expiry)) return cfg.access_token;
+  if (isExpiredSoon(cfg.token_expiry)) {
+    console.log("Access token expired/expiring, refreshing…", {
+      user: cfg.user_email,
+      token_expiry: cfg.token_expiry,
+      now: nowIso(),
+    });
 
-  console.log("Access token expired/expiring, refreshing…", {
-    user: cfg.user_email,
-    token_expiry: cfg.token_expiry,
-    now: nowIso(),
-  });
+    const refreshed = await refreshAccessToken({
+      clientId,
+      clientSecret,
+      refreshToken: cfg.refresh_token,
+    });
 
-  const refreshed = await refreshAccessToken({
-    clientId,
-    clientSecret,
-    refreshToken: cfg.refresh_token,
-  });
+    accessToken = refreshed.access_token;
+    const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
 
-  const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString();
+    const { error: updErr } = await supabaseAdmin
+      .from("google_drive_config")
+      .update({ access_token: accessToken, token_expiry: newExpiry, updated_at: nowIso() })
+      .eq("id", cfg.id);
 
-  const { error: updErr } = await supabaseAdmin
-    .from("google_drive_config")
-    .update({ access_token: refreshed.access_token, token_expiry: newExpiry, updated_at: nowIso() })
-    .neq("id", "00000000-0000-0000-0000-000000000000");
+    if (updErr) console.warn("Failed to update google_drive_config with refreshed token:", updErr);
+  }
 
-  if (updErr) console.warn("Failed to update google_drive_config with refreshed token:", updErr);
-
-  return refreshed.access_token;
+  return { accessToken, configId: cfg.id, rootFolderId: cfg.root_folder_id };
 }
 
 async function driveFetch(accessToken: string, input: string, init?: RequestInit) {
@@ -103,8 +109,13 @@ async function driveFetch(accessToken: string, input: string, init?: RequestInit
   });
 }
 
-async function findFolder(accessToken: string, folderName: string, parentFolderId: string): Promise<string | null> {
-  const query = `name='${folderName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+async function findFolderByName(accessToken: string, folderName: string, parentId?: string): Promise<string | null> {
+  let query = `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  if (parentId) {
+    query += ` and '${parentId}' in parents`;
+  } else {
+    query += ` and 'root' in parents`;
+  }
   const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`;
   const res = await driveFetch(accessToken, url);
   const data = await res.json().catch(() => ({}));
@@ -115,12 +126,14 @@ async function findFolder(accessToken: string, folderName: string, parentFolderI
   return data.files?.[0]?.id || null;
 }
 
-async function createFolder(accessToken: string, folderName: string, parentFolderId: string): Promise<string> {
-  const metadata = {
+async function createFolder(accessToken: string, folderName: string, parentId?: string): Promise<string> {
+  const metadata: Record<string, unknown> = {
     name: folderName,
     mimeType: "application/vnd.google-apps.folder",
-    parents: [parentFolderId],
   };
+  if (parentId) {
+    metadata.parents = [parentId];
+  }
 
   const res = await driveFetch(
     accessToken,
@@ -142,13 +155,66 @@ async function createFolder(accessToken: string, folderName: string, parentFolde
   return data.id;
 }
 
+async function getOrCreateRootFolder(
+  accessToken: string,
+  supabaseAdmin: any,
+  configId: string,
+  existingRootFolderId: string | null
+): Promise<string> {
+  // If we have a stored root folder ID, verify it still exists
+  if (existingRootFolderId) {
+    const checkRes = await driveFetch(
+      accessToken,
+      `https://www.googleapis.com/drive/v3/files/${existingRootFolderId}?fields=id,name,trashed&supportsAllDrives=true`
+    );
+    const checkData = await checkRes.json().catch(() => ({}));
+    if (checkRes.ok && !checkData.trashed) {
+      console.log(`Using existing root folder: ${existingRootFolderId} (${checkData.name})`);
+      return existingRootFolderId;
+    }
+    console.log("Stored root folder not accessible or trashed, will create new one");
+  }
+
+  // Try to find existing folder by name in root
+  const existingId = await findFolderByName(accessToken, ROOT_FOLDER_NAME);
+  if (existingId) {
+    console.log(`Found existing "${ROOT_FOLDER_NAME}" folder: ${existingId}`);
+    // Save it for future use
+    await supabaseAdmin
+      .from("google_drive_config")
+      .update({ root_folder_id: existingId, updated_at: nowIso() })
+      .eq("id", configId);
+    return existingId;
+  }
+
+  // Create new root folder
+  const newFolderId = await createFolder(accessToken, ROOT_FOLDER_NAME);
+  console.log(`Created new "${ROOT_FOLDER_NAME}" folder: ${newFolderId}`);
+
+  // Save it for future use
+  await supabaseAdmin
+    .from("google_drive_config")
+    .update({ root_folder_id: newFolderId, updated_at: nowIso() })
+    .eq("id", configId);
+
+  return newFolderId;
+}
+
 async function getOrCreateResidentFolder(accessToken: string, residentName: string, parentFolderId: string): Promise<string> {
   const safeFolderName = residentName.replace(/[<>:"/\\|?*]/g, "_").trim();
-  const existing = await findFolder(accessToken, safeFolderName, parentFolderId);
-  if (existing) {
-    console.log(`Found existing folder for "${safeFolderName}": ${existing}`);
-    return existing;
+  
+  // Find existing
+  const query = `name='${safeFolderName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  const res = await driveFetch(accessToken, url);
+  const data = await res.json().catch(() => ({}));
+  
+  if (res.ok && data.files?.[0]?.id) {
+    console.log(`Found existing folder for "${safeFolderName}": ${data.files[0].id}`);
+    return data.files[0].id;
   }
+
+  // Create new
   return await createFolder(accessToken, safeFolderName, parentFolderId);
 }
 
@@ -228,38 +294,24 @@ serve(async (req) => {
     if (!supabaseUrl || !supabaseServiceKey) throw new Error("Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY");
 
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
-    const accessToken = await getValidDriveAccessToken(supabaseAdmin);
+    const { accessToken, configId, rootFolderId } = await getValidDriveConfig(supabaseAdmin);
 
     const { action, fileName, fileContent, mimeType, fileId, residentName } = await req.json();
     console.log(`Processing action: ${action}`);
-
-    const rootFolderId = Deno.env.get("GOOGLE_DRIVE_FOLDER_ID");
-    if (!rootFolderId) throw new Error("Missing GOOGLE_DRIVE_FOLDER_ID");
 
     if (action === "upload") {
       if (!fileName || !fileContent || !mimeType) {
         throw new Error("Missing required fields: fileName, fileContent, mimeType");
       }
 
-      // Ensure root folder exists + readable
-      const folderCheckRes = await driveFetch(
-        accessToken,
-        `https://www.googleapis.com/drive/v3/files/${rootFolderId}?fields=id,name,mimeType&supportsAllDrives=true`
-      );
-      const folderCheck = await folderCheckRes.json().catch(() => ({}));
-      if (!folderCheckRes.ok) {
-        console.error("Root folder check failed:", { rootFolderId, status: folderCheckRes.status, folderCheck });
-        throw new Error("Cannot access GOOGLE_DRIVE_FOLDER_ID with the connected Google account. Ensure it exists and is accessible.");
-      }
-      if (folderCheck?.mimeType !== "application/vnd.google-apps.folder") {
-        throw new Error("GOOGLE_DRIVE_FOLDER_ID is not a folder id (must be /folders/<id>)");
-      }
+      // Get or create root folder (auto-creates "Residents-Documents" if needed)
+      const actualRootFolderId = await getOrCreateRootFolder(accessToken, supabaseAdmin, configId, rootFolderId);
+      console.log(`Using root folder: ${actualRootFolderId}`);
 
-      console.log(`Root folder: ${rootFolderId} (${folderCheck?.name || "unknown"})`);
-
-      let targetFolderId = rootFolderId;
+      // Get or create resident-specific folder
+      let targetFolderId = actualRootFolderId;
       if (residentName) {
-        targetFolderId = await getOrCreateResidentFolder(accessToken, residentName, rootFolderId);
+        targetFolderId = await getOrCreateResidentFolder(accessToken, residentName, actualRootFolderId);
         console.log(`Using resident folder: ${targetFolderId} for "${residentName}"`);
       }
 

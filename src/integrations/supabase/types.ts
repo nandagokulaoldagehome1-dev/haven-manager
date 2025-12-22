@@ -88,6 +88,7 @@ export type Database = {
           created_at: string | null
           id: string
           refresh_token: string
+          root_folder_id: string | null
           token_expiry: string
           updated_at: string | null
           user_email: string | null
@@ -97,6 +98,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           refresh_token: string
+          root_folder_id?: string | null
           token_expiry: string
           updated_at?: string | null
           user_email?: string | null
@@ -106,6 +108,7 @@ export type Database = {
           created_at?: string | null
           id?: string
           refresh_token?: string
+          root_folder_id?: string | null
           token_expiry?: string
           updated_at?: string | null
           user_email?: string | null
