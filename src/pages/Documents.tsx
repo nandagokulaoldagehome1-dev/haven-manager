@@ -27,8 +27,11 @@ import {
   Trash2,
   Loader2,
   Eye,
-  HardDrive
+  HardDrive,
+  Download,
+  FolderDown
 } from 'lucide-react';
+import JSZip from 'jszip';
 
 interface Document {
   id: string;
@@ -61,6 +64,7 @@ export default function Documents() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterResident, setFilterResident] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -129,7 +133,6 @@ export default function Documents() {
       reader.readAsDataURL(file);
       reader.onload = () => {
         const result = reader.result as string;
-        // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
         const base64 = result.split(',')[1];
         resolve(base64);
       };
@@ -144,20 +147,16 @@ export default function Documents() {
     setUploading(true);
 
     try {
-      // Get resident name for folder creation
       const resident = residents.find(r => r.id === formData.resident_id);
       if (!resident) throw new Error('Resident not found');
 
-      // Convert file to base64
       const fileContent = await fileToBase64(selectedFile);
       const mimeType = selectedFile.type || 'application/octet-stream';
 
-      // Generate unique filename
       const fileExt = selectedFile.name.split('.').pop() || 'bin';
       const safeType = formData.document_type || 'document';
       const fileName = `${safeType}_${Date.now()}.${fileExt}`;
 
-      // Upload to Google Drive via edge function
       const { data: uploadResult, error: uploadError } = await supabase.functions.invoke('upload-to-drive', {
         body: {
           action: 'upload',
@@ -173,7 +172,6 @@ export default function Documents() {
         throw new Error(uploadResult?.error || 'Upload failed');
       }
 
-      // Store in database with Google Drive reference
       const { error: dbError } = await supabase.from('documents').insert({
         resident_id: formData.resident_id,
         document_type: formData.document_type,
@@ -209,7 +207,6 @@ export default function Documents() {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     try {
-      // Delete from Google Drive if we have the file ID
       if (doc.drive_file_id) {
         const response = await supabase.functions.invoke('upload-to-drive', {
           body: {
@@ -222,7 +219,6 @@ export default function Documents() {
           console.warn('Could not delete from Google Drive:', response.data?.error);
         }
       } else if (doc.file_url.startsWith('gdrive:')) {
-        // Legacy format: gdrive:fileId|viewLink
         const fileId = doc.file_url.replace('gdrive:', '').split('|')[0];
         
         const response = await supabase.functions.invoke('upload-to-drive', {
@@ -236,7 +232,6 @@ export default function Documents() {
           console.warn('Could not delete from Google Drive:', response.data?.error);
         }
       } else if (!doc.file_url.includes('drive.google.com')) {
-        // Legacy: Delete from Supabase storage
         const urlParts = doc.file_url.split('/');
         const filePath = urlParts.slice(-2).join('/');
 
@@ -268,6 +263,97 @@ export default function Documents() {
     }
   };
 
+  const handleBulkDownload = async (residentId?: string) => {
+    const docsToDownload = residentId 
+      ? filteredDocuments.filter(d => d.resident_id === residentId)
+      : filteredDocuments;
+
+    if (docsToDownload.length === 0) {
+      toast({
+        title: 'No Documents',
+        description: 'No documents to download.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setDownloading(true);
+    const zip = new JSZip();
+    let successCount = 0;
+    let failCount = 0;
+
+    const residentName = residentId 
+      ? residents.find(r => r.id === residentId)?.full_name || 'Unknown'
+      : 'All_Residents';
+
+    toast({
+      title: 'Preparing Download',
+      description: `Downloading ${docsToDownload.length} document(s)...`,
+    });
+
+    for (const doc of docsToDownload) {
+      try {
+        // For Google Drive files, we need to use a proxy or direct download URL
+        let downloadUrl = doc.file_url;
+        
+        // Convert Google Drive view URL to direct download URL
+        if (doc.file_url.includes('drive.google.com/file/d/')) {
+          const fileId = doc.file_url.match(/\/d\/([^/]+)/)?.[1];
+          if (fileId) {
+            downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+          }
+        }
+
+        const response = await fetch(downloadUrl);
+        if (!response.ok) throw new Error('Failed to fetch file');
+        
+        const blob = await response.blob();
+        const folderName = doc.resident_name || 'Unknown';
+        zip.file(`${folderName}/${doc.file_name}`, blob);
+        successCount++;
+      } catch (error) {
+        console.error(`Failed to download ${doc.file_name}:`, error);
+        failCount++;
+      }
+    }
+
+    if (successCount === 0) {
+      toast({
+        title: 'Download Failed',
+        description: 'Could not download any files. Google Drive files may require manual download.',
+        variant: 'destructive',
+      });
+      setDownloading(false);
+      return;
+    }
+
+    try {
+      const content = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${residentName}_Documents_${new Date().toISOString().split('T')[0]}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({
+        title: 'Download Complete',
+        description: `Downloaded ${successCount} file(s)${failCount > 0 ? `, ${failCount} failed` : ''}.`,
+      });
+    } catch (error) {
+      console.error('Error creating ZIP:', error);
+      toast({
+        title: 'Download Failed',
+        description: 'Failed to create ZIP file.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const resetForm = () => {
     setFormData({ resident_id: '', document_type: '' });
     setSelectedFile(null);
@@ -289,6 +375,9 @@ export default function Documents() {
     return doc.drive_file_id || doc.file_url.includes('drive.google.com') || doc.file_url.startsWith('gdrive:');
   };
 
+  // Get unique residents from filtered documents for bulk download options
+  const residentsWithDocs = [...new Set(filteredDocuments.map(d => d.resident_id))];
+
   return (
     <AppLayout>
       <div className="space-y-6">
@@ -298,110 +387,127 @@ export default function Documents() {
             <h1 className="page-title">Documents</h1>
             <p className="page-description">Manage resident documents stored in Google Drive</p>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => {
-            setDialogOpen(open);
-            if (!open) resetForm();
-          }}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="w-4 h-4" />
-                Upload Document
+          <div className="flex items-center gap-2">
+            {/* Bulk Download Button */}
+            {filteredDocuments.length > 0 && (
+              <Button 
+                variant="outline" 
+                onClick={() => handleBulkDownload()}
+                disabled={downloading}
+              >
+                {downloading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FolderDown className="w-4 h-4" />
+                )}
+                {downloading ? 'Downloading...' : 'Download All'}
               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <HardDrive className="w-5 h-5" />
-                  Upload to Google Drive
-                </DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleUpload} className="space-y-4 mt-4">
-                <div>
-                  <Label>Resident</Label>
-                  <Select 
-                    value={formData.resident_id} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, resident_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select resident" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {residents.map(resident => (
-                        <SelectItem key={resident.id} value={resident.id}>
-                          {resident.full_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Document will be stored in resident's folder
-                  </p>
-                </div>
-                <div>
-                  <Label>Document Type</Label>
-                  <Select 
-                    value={formData.document_type} 
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, document_type: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {documentTypes.map(type => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label htmlFor="file">File</Label>
-                  <div className="mt-2">
-                    <label 
-                      htmlFor="file"
-                      className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+            )}
+            <Dialog open={dialogOpen} onOpenChange={(open) => {
+              setDialogOpen(open);
+              if (!open) resetForm();
+            }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="w-4 h-4" />
+                  Upload Document
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <HardDrive className="w-5 h-5" />
+                    Upload to Google Drive
+                  </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleUpload} className="space-y-4 mt-4">
+                  <div>
+                    <Label>Resident</Label>
+                    <Select 
+                      value={formData.resident_id} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, resident_id: value }))}
                     >
-                      {selectedFile ? (
-                        <div className="text-center">
-                          <FileText className="w-8 h-8 text-primary mx-auto mb-2" />
-                          <p className="text-sm font-medium truncate max-w-[200px]">
-                            {selectedFile.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="text-center">
-                          <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                          <p className="text-sm text-muted-foreground">
-                            Click to upload (Max 10MB)
-                          </p>
-                        </div>
-                      )}
-                    </label>
-                    <Input
-                      id="file"
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      onChange={handleFileChange}
-                      className="hidden"
-                    />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select resident" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {residents.map(resident => (
+                          <SelectItem key={resident.id} value={resident.id}>
+                            {resident.full_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Document will be stored in resident's folder
+                    </p>
                   </div>
-                </div>
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={uploading || !selectedFile}>
-                    {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {uploading ? 'Uploading...' : 'Upload'}
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+                  <div>
+                    <Label>Document Type</Label>
+                    <Select 
+                      value={formData.document_type} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, document_type: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {documentTypes.map(type => (
+                          <SelectItem key={type.value} value={type.value}>
+                            {type.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="file">File</Label>
+                    <div className="mt-2">
+                      <label 
+                        htmlFor="file"
+                        className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                      >
+                        {selectedFile ? (
+                          <div className="text-center">
+                            <FileText className="w-8 h-8 text-primary mx-auto mb-2" />
+                            <p className="text-sm font-medium truncate max-w-[200px]">
+                              {selectedFile.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                            <p className="text-sm text-muted-foreground">
+                              Click to upload (Max 10MB)
+                            </p>
+                          </div>
+                        )}
+                      </label>
+                      <Input
+                        id="file"
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-3 pt-4">
+                    <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" disabled={uploading || !selectedFile}>
+                      {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
+                      {uploading ? 'Uploading...' : 'Upload'}
+                    </Button>
+                  </div>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
@@ -442,6 +548,25 @@ export default function Documents() {
             </SelectContent>
           </Select>
         </div>
+
+        {/* Bulk Download per Resident */}
+        {filterResident && filterResident !== 'all' && filteredDocuments.length > 1 && (
+          <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
+            <Download className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm text-muted-foreground">
+              {filteredDocuments.length} documents for this resident
+            </span>
+            <Button 
+              variant="secondary" 
+              size="sm"
+              onClick={() => handleBulkDownload(filterResident)}
+              disabled={downloading}
+            >
+              {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FolderDown className="w-4 h-4" />}
+              Download All
+            </Button>
+          </div>
+        )}
 
         {/* Documents List */}
         {loading ? (
