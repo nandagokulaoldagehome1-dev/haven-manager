@@ -18,6 +18,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
 import { 
   Plus, 
@@ -53,6 +63,8 @@ export default function Rooms() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editingRoom, setEditingRoom] = useState<Room | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [roomToDelete, setRoomToDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     room_number: '',
@@ -174,14 +186,19 @@ export default function Rooms() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (roomId: string) => {
-    if (!confirm('Are you sure you want to delete this room?')) return;
+  const confirmDelete = (roomId: string) => {
+    setRoomToDelete(roomId);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!roomToDelete) return;
 
     try {
       const { error } = await supabase
         .from('rooms')
         .delete()
-        .eq('id', roomId);
+        .eq('id', roomToDelete);
 
       if (error) throw error;
 
@@ -190,6 +207,8 @@ export default function Rooms() {
         description: 'The room has been removed.',
       });
 
+      setDeleteDialogOpen(false);
+      setRoomToDelete(null);
       fetchRooms();
     } catch (error: any) {
       toast({
@@ -197,6 +216,9 @@ export default function Rooms() {
         description: error.message || 'Failed to delete room',
         variant: 'destructive',
       });
+    } finally {
+      setDeleteDialogOpen(false);
+      setRoomToDelete(null);
     }
   };
 
@@ -385,7 +407,7 @@ export default function Rooms() {
                     <Button 
                       variant="outline" 
                       size="sm"
-                      onClick={() => handleDelete(room.id)}
+                      onClick={() => confirmDelete(room.id)}
                       className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -409,6 +431,23 @@ export default function Rooms() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Room</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this room? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

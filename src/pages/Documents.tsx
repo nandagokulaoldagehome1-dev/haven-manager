@@ -18,6 +18,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
 import { 
   Plus, 
@@ -68,6 +78,8 @@ export default function Documents() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterResident, setFilterResident] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
 
   const [formData, setFormData] = useState({
     resident_id: '',
@@ -203,8 +215,14 @@ export default function Documents() {
     }
   };
 
-  const handleDelete = async (doc: Document) => {
-    if (!confirm('Are you sure you want to delete this document?')) return;
+  const confirmDelete = (doc: Document) => {
+    setDocumentToDelete(doc);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!documentToDelete) return;
+    const doc = documentToDelete;
 
     try {
       if (doc.drive_file_id) {
@@ -252,6 +270,8 @@ export default function Documents() {
         description: 'The document has been removed.',
       });
 
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
       fetchData();
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Failed to delete document';
@@ -260,6 +280,9 @@ export default function Documents() {
         description: errorMessage,
         variant: 'destructive',
       });
+    } finally {
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
     }
   };
 
@@ -619,7 +642,7 @@ export default function Documents() {
                   <Button 
                     variant="outline" 
                     size="sm"
-                    onClick={() => handleDelete(doc)}
+                    onClick={() => confirmDelete(doc)}
                     className="text-destructive hover:text-destructive"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -647,6 +670,23 @@ export default function Documents() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this document? This will remove it from both the database and Google Drive. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

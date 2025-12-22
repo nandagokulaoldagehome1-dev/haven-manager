@@ -25,6 +25,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { BulkPhotoFix } from '@/components/BulkPhotoFix';
 import { toast } from '@/hooks/use-toast';
 
@@ -45,6 +55,8 @@ export default function Residents() {
   const [residents, setResidents] = useState<Resident[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [residentToDelete, setResidentToDelete] = useState<Resident | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -91,10 +103,14 @@ export default function Residents() {
     }
   };
 
-  const handleDelete = async (resident: Resident) => {
-    if (!confirm(`Are you sure you want to delete ${resident.full_name}? This action cannot be undone.`)) {
-      return;
-    }
+  const confirmDelete = (resident: Resident) => {
+    setResidentToDelete(resident);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!residentToDelete) return;
+    const resident = residentToDelete;
 
     try {
       // Delete related records first
@@ -117,6 +133,8 @@ export default function Residents() {
         description: `${resident.full_name} has been removed.`,
       });
 
+      setDeleteDialogOpen(false);
+      setResidentToDelete(null);
       fetchResidents();
     } catch (error: unknown) {
       console.error('Error deleting resident:', error);
@@ -214,7 +232,7 @@ export default function Residents() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
-                            onClick={() => handleDelete(resident)}
+                            onClick={() => confirmDelete(resident)}
                             className="text-destructive focus:text-destructive"
                           >
                             <Trash2 className="w-4 h-4 mr-2" />
@@ -281,6 +299,23 @@ export default function Residents() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Resident</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete {residentToDelete?.full_name}? This will also delete all associated records including documents, payments, and room assignments. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

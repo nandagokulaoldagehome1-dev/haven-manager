@@ -217,13 +217,15 @@ export default function Auth() {
 						<div className="space-y-2">
 							<div className="flex items-center justify-between">
 								<Label htmlFor="password">Password</Label>
-								<button
-									type="button"
-									className="text-xs text-primary hover:underline"
-									onClick={() => setShowPassword((prev) => !prev)}
-								>
-									{showPassword ? 'Hide' : 'Show'}
-								</button>
+								{isLogin && (
+									<button
+										type="button"
+										className="text-xs text-primary hover:underline"
+										onClick={() => navigate('/reset-password')}
+									>
+										Forgot password?
+									</button>
+								)}
 							</div>
 							<div className="relative">
 								<Input

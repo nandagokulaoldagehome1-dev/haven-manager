@@ -19,6 +19,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
 import { 
   Plus, 
@@ -66,6 +76,8 @@ export default function Reminders() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('all');
   const [generatingBirthdays, setGeneratingBirthdays] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [reminderToDelete, setReminderToDelete] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -265,14 +277,19 @@ export default function Reminders() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this reminder?')) return;
+  const confirmDelete = (id: string) => {
+    setReminderToDelete(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!reminderToDelete) return;
 
     try {
       const { error } = await supabase
         .from('reminders')
         .delete()
-        .eq('id', id);
+        .eq('id', reminderToDelete);
 
       if (error) throw error;
 
@@ -281,6 +298,8 @@ export default function Reminders() {
         description: 'The reminder has been removed.',
       });
 
+      setDeleteDialogOpen(false);
+      setReminderToDelete(null);
       fetchData();
     } catch (error: any) {
       toast({
@@ -543,7 +562,7 @@ export default function Reminders() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleDelete(reminder.id)}
+                        onClick={() => confirmDelete(reminder.id)}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -571,6 +590,23 @@ export default function Reminders() {
           </div>
         )}
       </div>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Reminder</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this reminder? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

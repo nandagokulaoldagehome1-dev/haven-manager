@@ -1,3 +1,5 @@
+// @ts-nocheck
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -6,7 +8,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
@@ -67,7 +69,9 @@ serve(async (req) => {
 
       // Check if user already exists
       const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
-      const existingUser = existingUsers?.users?.find(u => u.email === email);
+      const existingUser = existingUsers?.users?.find(
+        (u: { email?: string | null; id: string }) => u.email === email
+      );
 
       if (existingUser) {
         // User exists, check if they already have a role
@@ -104,60 +108,57 @@ serve(async (req) => {
         );
       }
 
-      // Create new user with invite
-      const tempPassword = crypto.randomUUID().slice(0, 16) + "Aa1!";
+      // Create new user with invite - this will send an email automatically
+      console.log("Creating user and sending invite email...");
       
-      const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
         email,
-        password: tempPassword,
-        email_confirm: false, // Send confirmation email
-        user_metadata: { invited_by: requestingUser.id },
-      });
+        {
+          redirectTo: `${req.headers.get("origin") || "https://e9338bf3-2986-47ab-a045-e2e89f9939a2.lovableproject.com"}/auth`,
+          data: {
+            invited_by: requestingUser.id,
+            role: "admin",
+          },
+        }
+      );
 
-      if (createError) {
-        console.error("Create user error:", createError);
-        throw new Error(createError.message || "Failed to create user");
+      if (inviteError) {
+        console.error("Invite user error:", inviteError);
+        throw new Error(inviteError.message || "Failed to send invitation email");
       }
 
-      if (!newUser?.user) {
+      if (!inviteData?.user) {
         throw new Error("Failed to create user");
       }
+
+      console.log(`User created with ID: ${inviteData.user.id}`);
 
       // Add admin role
       const { error: roleInsertError } = await supabaseAdmin
         .from("user_roles")
         .insert({
-          user_id: newUser.user.id,
+          user_id: inviteData.user.id,
           role: "admin",
         });
 
       if (roleInsertError) {
         console.error("Role insert error:", roleInsertError);
         // Try to clean up the user we just created
-        await supabaseAdmin.auth.admin.deleteUser(newUser.user.id);
+        await supabaseAdmin.auth.admin.deleteUser(inviteData.user.id);
         throw new Error("Failed to assign admin role");
       }
 
-      // Send password reset email so they can set their password
-      const { error: resetError } = await supabaseAdmin.auth.admin.generateLink({
-        type: "recovery",
-        email,
-        options: {
-          redirectTo: `${req.headers.get("origin") || "https://e9338bf3-2986-47ab-a045-e2e89f9939a2.lovableproject.com"}/auth`,
-        },
-      });
+      console.log(`Admin role assigned successfully`);
 
-      if (resetError) {
-        console.warn("Could not send recovery email:", resetError);
-      }
+      console.log(`Admin role assigned successfully`);
 
-      console.log(`Successfully invited admin: ${email}`);
+      console.log(`Successfully invited admin: ${email} - Invitation email sent`);
 
       return new Response(
         JSON.stringify({
           success: true,
-          message: `Admin invitation sent to ${email}`,
-          user_id: newUser.user.id,
+          message: `Invitation email sent to ${email}. They will receive an email to set up their account.`,
+          user_id: inviteData.user.id,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );

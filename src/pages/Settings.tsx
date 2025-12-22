@@ -12,20 +12,30 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { toast } from '@/hooks/use-toast';
 import { 
-  UserPlus, 
-  Users,
-  Shield,
   ShieldCheck,
   Loader2,
-  Mail,
-  Trash2,
-  Key,
   HardDrive,
   ExternalLink,
   CheckCircle,
   XCircle,
+  Mail,
+  Key,
+  User,
+  UserPlus,
+  Shield,
+  Trash2,
 } from 'lucide-react';
 
 interface AdminUser {
@@ -33,7 +43,7 @@ interface AdminUser {
   user_id: string;
   role: string;
   email?: string;
-  created_at: string;
+  created_at?: string;
 }
 
 interface GoogleDriveStatus {
@@ -45,23 +55,141 @@ interface GoogleDriveStatus {
 export default function Settings() {
   const { isSuper, user } = useAuth();
   const [admins, setAdmins] = useState<AdminUser[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [adminsLoading, setAdminsLoading] = useState(true);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus>({ connected: false });
   const [driveLoading, setDriveLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [adminToDelete, setAdminToDelete] = useState<AdminUser | null>(null);
 
   useEffect(() => {
     if (isSuper) {
       fetchAdmins();
       checkDriveStatus();
     } else {
-      setLoading(false);
+      setAdminsLoading(false);
       setDriveLoading(false);
     }
   }, [isSuper]);
+
+  const fetchAdmins = async () => {
+    setAdminsLoading(true);
+    try {
+      const { data: result, error } = await supabase.functions.invoke('list-admins');
+
+      if (error) throw error;
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to fetch admins');
+      }
+
+      setAdmins(result.admins || []);
+    } catch (error) {
+      console.error('Error fetching admins:', error);
+      toast({
+        title: 'Error',
+        description: 'Could not load admins list.',
+        variant: 'destructive',
+      });
+    } finally {
+      setAdminsLoading(false);
+    }
+  };
+
+  const handleInviteAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inviteEmail) return;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setInviting(true);
+
+    try {
+      const { data: result, error } = await supabase.functions.invoke('invite-admin', {
+        body: { action: 'invite', email: inviteEmail },
+      });
+
+      if (error) throw error;
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to invite admin');
+      }
+
+      toast({
+        title: 'Admin Invited',
+        description: result.message || `Invitation sent to ${inviteEmail}`,
+      });
+
+      setInviteDialogOpen(false);
+      setInviteEmail('');
+      fetchAdmins();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to invite admin',
+        variant: 'destructive',
+      });
+    } finally {
+      setInviting(false);
+    }
+  };
+
+  const confirmRemoveAdmin = (admin: AdminUser) => {
+    if (admin.user_id === user?.id) {
+      toast({
+        title: 'Cannot Remove',
+        description: 'You cannot remove yourself.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (admin.role === 'super_admin') {
+      toast({
+        title: 'Protected',
+        description: 'Super admin cannot be removed.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setAdminToDelete(admin);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleRemoveAdmin = async () => {
+    if (!adminToDelete) return;
+    try {
+      const { error } = await supabase.functions.invoke('invite-admin', {
+        body: { action: 'remove', user_id: adminToDelete.user_id },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: 'Admin Removed',
+        description: 'The admin has been removed.',
+      });
+
+      fetchAdmins();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to remove admin',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setAdminToDelete(null);
+    }
+  };
 
   const checkDriveStatus = async () => {
     try {
@@ -140,107 +268,7 @@ export default function Settings() {
     }
   };
 
-  const fetchAdmins = async () => {
-    try {
-      const { data: result, error } = await supabase.functions.invoke('list-admins');
 
-      if (error) throw error;
-      if (!result?.success) {
-        throw new Error(result?.error || 'Failed to fetch admins');
-      }
-
-      setAdmins(result.admins || []);
-    } catch (error) {
-      console.error('Error fetching admins:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleInviteAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail) return;
-
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(inviteEmail)) {
-      toast({
-        title: 'Invalid Email',
-        description: 'Please enter a valid email address',
-        variant: 'destructive',
-      });
-      return;
-    }
-    
-    setInviting(true);
-
-    try {
-      const { data: result, error } = await supabase.functions.invoke('invite-admin', {
-        body: {
-          action: 'invite',
-          email: inviteEmail,
-        },
-      });
-
-      if (error) throw error;
-      if (!result?.success) {
-        throw new Error(result?.error || 'Failed to invite admin');
-      }
-
-      toast({
-        title: 'Admin Invited',
-        description: result.message || `Invitation sent to ${inviteEmail}`,
-      });
-
-      setDialogOpen(false);
-      setInviteEmail('');
-      fetchAdmins();
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Failed to invite admin';
-      toast({
-        title: 'Error',
-        description: errorMessage,
-        variant: 'destructive',
-      });
-    } finally {
-      setInviting(false);
-    }
-  };
-
-  const handleRemoveAdmin = async (adminId: string, adminUserId: string) => {
-    if (adminUserId === user?.id) {
-      toast({
-        title: 'Cannot Remove',
-        description: 'You cannot remove yourself.',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (!confirm('Are you sure you want to remove this admin?')) return;
-
-    try {
-      const { error } = await supabase
-        .from('user_roles')
-        .delete()
-        .eq('id', adminId);
-
-      if (error) throw error;
-
-      toast({
-        title: 'Admin Removed',
-        description: 'The admin has been removed.',
-      });
-
-      fetchAdmins();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.message,
-        variant: 'destructive',
-      });
-    }
-  };
 
   return (
     <AppLayout>
@@ -251,20 +279,50 @@ export default function Settings() {
           <p className="page-description">Manage system settings and administrators</p>
         </div>
 
+        {/* Admin Information - Only for Super Admin */}
+        {isSuper && (
+          <div className="card-elevated p-6">
+            <div className="mb-6">
+              <h2 className="text-lg font-semibold flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+                Administrator
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                You are logged in as the super administrator
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/10">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <p className="font-medium flex items-center gap-2">
+                  {user?.email}
+                  <span className="text-xs text-muted-foreground">(You)</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Super Admin
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Admin Management - Only for Super Admin */}
         {isSuper && (
           <div className="card-elevated p-6">
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-primary" />
+                  <Shield className="w-5 h-5 text-primary" />
                   Admin Management
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  Manage administrators who can access the system
+                  Invite and manage admin users (full access, no Drive connection)
                 </p>
               </div>
-              <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+              <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
                 <DialogTrigger asChild>
                   <Button>
                     <UserPlus className="w-4 h-4" />
@@ -277,9 +335,9 @@ export default function Settings() {
                   </DialogHeader>
                   <form onSubmit={handleInviteAdmin} className="space-y-4 mt-4">
                     <div>
-                      <Label htmlFor="email">Email Address</Label>
+                      <Label htmlFor="inviteEmail">Email Address</Label>
                       <Input
-                        id="email"
+                        id="inviteEmail"
                         type="email"
                         value={inviteEmail}
                         onChange={(e) => setInviteEmail(e.target.value)}
@@ -287,11 +345,11 @@ export default function Settings() {
                         required
                       />
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      The new admin will receive an email with login instructions.
+                    <p className="text-xs text-muted-foreground">
+                      The admin will receive an email with a secure link to set their password and sign in. They will have full app access but cannot connect Google Drive (reserved for super admin).
                     </p>
                     <div className="flex justify-end gap-3 pt-4">
-                      <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                      <Button type="button" variant="outline" onClick={() => setInviteDialogOpen(false)}>
                         Cancel
                       </Button>
                       <Button type="submit" disabled={inviting}>
@@ -304,14 +362,14 @@ export default function Settings() {
               </Dialog>
             </div>
 
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            {adminsLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <Loader2 className="w-5 h-5 animate-spin text-primary" />
               </div>
-            ) : (
+            ) : admins.length > 0 ? (
               <div className="space-y-3">
                 {admins.map((admin) => (
-                  <div 
+                  <div
                     key={admin.id}
                     className="flex items-center justify-between p-4 rounded-lg bg-muted/50"
                   >
@@ -338,10 +396,10 @@ export default function Settings() {
                       </div>
                     </div>
                     {admin.role !== 'super_admin' && admin.user_id !== user?.id && (
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
-                        onClick={() => handleRemoveAdmin(admin.id, admin.user_id)}
+                        onClick={() => confirmRemoveAdmin(admin)}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -349,6 +407,10 @@ export default function Settings() {
                     )}
                   </div>
                 ))}
+              </div>
+            ) : (
+              <div className="p-4 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+                No admins yet. Invite one to get started.
               </div>
             )}
           </div>
@@ -437,7 +499,7 @@ export default function Settings() {
         {/* Account Settings */}
         <div className="card-elevated p-6">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" />
+            <User className="w-5 h-5 text-primary" />
             Your Account
           </h2>
           
@@ -462,7 +524,7 @@ export default function Settings() {
                 onClick={async () => {
                   const { error } = await supabase.auth.resetPasswordForEmail(
                     user?.email || '',
-                    { redirectTo: window.location.origin }
+                    { redirectTo: `${window.location.origin}/reset-password` }
                   );
                   if (error) {
                     toast({
@@ -499,6 +561,22 @@ export default function Settings() {
           </div>
         </div>
       </div>
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Admin</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this admin? They will lose access to the admin panel. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRemoveAdmin} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
