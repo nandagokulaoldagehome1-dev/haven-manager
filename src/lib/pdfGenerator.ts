@@ -24,6 +24,9 @@ export function generateReceiptPDF(data: ReceiptData): jsPDF {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   
+  // Rupees symbol - using "Rs. " for PDF compatibility
+  const rupeeSymbol = 'Rs. ';
+  
   // Define colors
   const primaryColor = [41, 128, 185]; // Professional blue
   const accentColor = [52, 73, 94]; // Dark blue-gray
@@ -147,7 +150,7 @@ export function generateReceiptPDF(data: ReceiptData): jsPDF {
   doc.text('Monthly Rent/Base Charges', 25, y);
   doc.setFont('helvetica', 'normal');
   doc.text('—', 90, y);
-  doc.text(`₹${data.baseAmount.toLocaleString('en-IN')}`, pageWidth - 45, y, { align: 'right' });
+  doc.text(`${rupeeSymbol}${data.baseAmount.toLocaleString('en-IN')}`, pageWidth - 45, y, { align: 'right' });
   
   // Extra Charges
   if (data.extraCharges.length > 0) {
@@ -173,7 +176,7 @@ export function generateReceiptPDF(data: ReceiptData): jsPDF {
       const displayText = `${charge.description} (${categoryLabel})`;
       doc.text(displayText, 25, y);
       doc.text(new Date(charge.date_charged).toLocaleDateString('en-IN'), 90, y);
-      doc.text(`₹${Number(charge.amount).toLocaleString('en-IN')}`, pageWidth - 45, y, { align: 'right' });
+      doc.text(`${rupeeSymbol}${Number(charge.amount).toLocaleString('en-IN')}`, pageWidth - 45, y, { align: 'right' });
     });
   }
   
@@ -188,13 +191,13 @@ export function generateReceiptPDF(data: ReceiptData): jsPDF {
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.text('Subtotal:', pageWidth - 115, y);
-  doc.text(`₹${data.baseAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
+  doc.text(`${rupeeSymbol}${data.baseAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
   
   y += 8;
   if (data.extraCharges.length > 0) {
     const extraTotal = data.extraCharges.reduce((sum, charge) => sum + charge.amount, 0);
     doc.text('Additional Charges:', pageWidth - 115, y);
-    doc.text(`₹${extraTotal.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
+    doc.text(`${rupeeSymbol}${extraTotal.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
     y += 8;
   }
   
@@ -202,7 +205,7 @@ export function generateReceiptPDF(data: ReceiptData): jsPDF {
   doc.setFont('helvetica', 'bold');
   doc.text('TOTAL PAYABLE:', pageWidth - 115, y);
   doc.setFontSize(14);
-  doc.text(`₹${data.totalAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
+  doc.text(`${rupeeSymbol}${data.totalAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
   
   // Payment Status Badge
   y += 18;
