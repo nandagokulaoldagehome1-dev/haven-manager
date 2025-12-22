@@ -52,7 +52,10 @@ serve(async (req: Request) => {
       throw new Error("Only super admins can invite new admins");
     }
 
-    const { email, action } = await req.json();
+    const body = await req.json();
+    const { email, action } = body;
+
+    console.log("Request body:", body);
 
     if (action === "invite") {
       if (!email || typeof email !== "string") {
@@ -114,7 +117,7 @@ serve(async (req: Request) => {
       const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(
         email,
         {
-          redirectTo: `${req.headers.get("origin") || "https://e9338bf3-2986-47ab-a045-e2e89f9939a2.lovableproject.com"}/auth`,
+          redirectTo: `${req.headers.get("origin") || "https://e9338bf3-2986-47ab-a045-e2e89f9939a2.lovableproject.com"}/accept-invite`,
           data: {
             invited_by: requestingUser.id,
             role: "admin",
@@ -165,7 +168,7 @@ serve(async (req: Request) => {
     }
 
     if (action === "remove") {
-      const { user_id } = await req.json();
+      const { user_id } = body;
       
       if (!user_id) {
         throw new Error("User ID is required");
