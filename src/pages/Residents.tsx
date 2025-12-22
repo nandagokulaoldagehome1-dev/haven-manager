@@ -4,6 +4,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { 
   Plus, 
   Search, 
@@ -14,7 +15,8 @@ import {
   Eye,
   Edit,
   Loader2,
-  Trash2
+  Trash2,
+  FileText
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -36,6 +38,7 @@ interface Resident {
   address: string | null;
   status: string;
   created_at: string;
+  document_count?: number;
 }
 
 export default function Residents() {
@@ -50,14 +53,37 @@ export default function Residents() {
 
   const fetchResidents = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch residents
+      const { data: residentsData, error: residentsError } = await supabase
         .from('residents')
         .select('*')
         .eq('status', 'active')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setResidents(data || []);
+      if (residentsError) throw residentsError;
+
+      // Fetch document counts per resident
+      const { data: docCounts, error: docError } = await supabase
+        .from('documents')
+        .select('resident_id');
+
+      if (docError) throw docError;
+
+      // Count documents per resident
+      const countMap: Record<string, number> = {};
+      docCounts?.forEach(doc => {
+        if (doc.resident_id) {
+          countMap[doc.resident_id] = (countMap[doc.resident_id] || 0) + 1;
+        }
+      });
+
+      // Merge counts into residents
+      const residentsWithCounts = (residentsData || []).map(r => ({
+        ...r,
+        document_count: countMap[r.id] || 0,
+      }));
+
+      setResidents(residentsWithCounts);
     } catch (error) {
       console.error('Error fetching residents:', error);
     } finally {
@@ -92,11 +118,12 @@ export default function Residents() {
       });
 
       fetchResidents();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error deleting resident:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete resident';
       toast({
         title: 'Error',
-        description: error.message || 'Failed to delete resident',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -196,6 +223,14 @@ export default function Residents() {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
+                    
+                    {/* Document Count Badge */}
+                    {resident.document_count !== undefined && resident.document_count > 0 && (
+                      <Badge variant="secondary" className="mt-2 gap-1">
+                        <FileText className="w-3 h-3" />
+                        {resident.document_count} {resident.document_count === 1 ? 'doc' : 'docs'}
+                      </Badge>
+                    )}
                   </div>
                 </div>
 
