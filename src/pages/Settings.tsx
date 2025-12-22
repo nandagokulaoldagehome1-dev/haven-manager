@@ -142,13 +142,14 @@ export default function Settings() {
 
   const fetchAdmins = async () => {
     try {
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: result, error } = await supabase.functions.invoke('list-admins');
 
       if (error) throw error;
-      setAdmins(data || []);
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to fetch admins');
+      }
+
+      setAdmins(result.admins || []);
     } catch (error) {
       console.error('Error fetching admins:', error);
     } finally {
@@ -159,50 +160,46 @@ export default function Settings() {
   const handleInviteAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail) return;
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(inviteEmail)) {
+      toast({
+        title: 'Invalid Email',
+        description: 'Please enter a valid email address',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     setInviting(true);
 
     try {
-      // Create user with a temporary password
-      const tempPassword = Math.random().toString(36).slice(-12) + 'A1!';
-      
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: inviteEmail,
-        password: tempPassword,
-        email_confirm: true,
+      const { data: result, error } = await supabase.functions.invoke('invite-admin', {
+        body: {
+          action: 'invite',
+          email: inviteEmail,
+        },
       });
 
-      if (authError) {
-        // If admin API fails, show message to use sign up
-        toast({
-          title: 'Invite Info',
-          description: 'Please ask the new admin to sign up and you can then assign their role.',
-        });
-        setDialogOpen(false);
-        setInviteEmail('');
-        return;
+      if (error) throw error;
+      if (!result?.success) {
+        throw new Error(result?.error || 'Failed to invite admin');
       }
-
-      // Add role for the new user
-      const { error: roleError } = await supabase.from('user_roles').insert({
-        user_id: authData.user.id,
-        role: 'admin',
-      });
-
-      if (roleError) throw roleError;
 
       toast({
         title: 'Admin Invited',
-        description: `Invitation sent to ${inviteEmail}`,
+        description: result.message || `Invitation sent to ${inviteEmail}`,
       });
 
       setDialogOpen(false);
       setInviteEmail('');
       fetchAdmins();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to invite admin';
       toast({
         title: 'Error',
-        description: error.message || 'Failed to invite admin',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
