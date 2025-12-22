@@ -6,9 +6,6 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Default folder name in Google Drive where documents will be uploaded
-const DEFAULT_FOLDER_NAME = "Residents-Documents";
-
 interface ServiceAccount {
   client_email: string;
   private_key: string;
@@ -33,7 +30,6 @@ async function getAccessToken(serviceAccount: ServiceAccount): Promise<string> {
   const payloadB64 = btoa(JSON.stringify(payload)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
   const signatureInput = `${headerB64}.${payloadB64}`;
 
-  // Import private key
   const pemContents = serviceAccount.private_key
     .replace(/-----BEGIN PRIVATE KEY-----/g, '')
     .replace(/-----END PRIVATE KEY-----/g, '')
@@ -60,7 +56,6 @@ async function getAccessToken(serviceAccount: ServiceAccount): Promise<string> {
 
   const jwt = `${signatureInput}.${signatureB64}`;
 
-  // Exchange JWT for access token
   const tokenResponse = await fetch(serviceAccount.token_uri, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -74,21 +69,94 @@ async function getAccessToken(serviceAccount: ServiceAccount): Promise<string> {
   return tokenData.access_token as string;
 }
 
+// Find a folder by name inside a parent folder
+async function findFolder(
+  accessToken: string,
+  folderName: string,
+  parentFolderId: string
+): Promise<string | null> {
+  const query = `name='${folderName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  const url = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&supportsAllDrives=true&includeItemsFromAllDrives=true`;
+  
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error('Find folder error:', data);
+    return null;
+  }
+  
+  return data.files?.[0]?.id || null;
+}
+
+// Create a folder inside a parent folder
+async function createFolder(
+  accessToken: string,
+  folderName: string,
+  parentFolderId: string
+): Promise<string> {
+  const metadata = {
+    name: folderName,
+    mimeType: 'application/vnd.google-apps.folder',
+    parents: [parentFolderId],
+  };
+
+  const response = await fetch(
+    'https://www.googleapis.com/drive/v3/files?fields=id&supportsAllDrives=true',
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(metadata),
+    }
+  );
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    console.error('Create folder error:', data);
+    throw new Error(data.error?.message || 'Failed to create folder');
+  }
+
+  console.log(`Created folder "${folderName}" with id: ${data.id}`);
+  return data.id;
+}
+
+// Get or create a resident folder
+async function getOrCreateResidentFolder(
+  accessToken: string,
+  residentName: string,
+  parentFolderId: string
+): Promise<string> {
+  // Sanitize folder name (remove special chars that might cause issues)
+  const safeFolderName = residentName.replace(/[<>:"/\\|?*]/g, '_').trim();
+  
+  // Try to find existing folder
+  const existingFolderId = await findFolder(accessToken, safeFolderName, parentFolderId);
+  if (existingFolderId) {
+    console.log(`Found existing folder for "${safeFolderName}": ${existingFolderId}`);
+    return existingFolderId;
+  }
+  
+  // Create new folder
+  return await createFolder(accessToken, safeFolderName, parentFolderId);
+}
+
 async function uploadToDrive(
   accessToken: string,
   fileName: string,
   fileContent: string,
   mimeType: string,
-  folderId?: string
+  folderId: string
 ): Promise<{ id: string; webViewLink: string }> {
-  const metadata: Record<string, any> = {
+  const metadata = {
     name: fileName,
     mimeType: mimeType,
+    parents: [folderId],
   };
-
-  if (folderId) {
-    metadata.parents = [folderId];
-  }
 
   const boundary = '-------314159265358979323846';
   const delimiter = `\r\n--${boundary}\r\n`;
@@ -96,7 +164,6 @@ async function uploadToDrive(
 
   const metadataStr = JSON.stringify(metadata);
 
-  // Build multipart body (metadata JSON + base64 file content)
   const bodyParts = [
     delimiter,
     'Content-Type: application/json; charset=UTF-8\r\n\r\n',
@@ -171,7 +238,6 @@ async function deleteFromDrive(accessToken: string, fileId: string): Promise<voi
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -185,7 +251,7 @@ serve(async (req) => {
     const serviceAccount: ServiceAccount = JSON.parse(serviceAccountJson);
     const accessToken = await getAccessToken(serviceAccount);
 
-    const { action, fileName, fileContent, mimeType, fileId, folderId } = await req.json();
+    const { action, fileName, fileContent, mimeType, fileId, residentName } = await req.json();
 
     console.log(`Processing action: ${action}`);
 
@@ -194,25 +260,22 @@ serve(async (req) => {
         throw new Error('Missing required fields: fileName, fileContent, mimeType');
       }
 
-      // Service accounts have no storage quota in “My Drive”.
-      // We MUST upload into a folder owned by a real Google account / Shared Drive,
-      // and that folder must be shared with the service account email.
-      const targetFolderId = folderId || Deno.env.get('GOOGLE_DRIVE_FOLDER_ID');
-      if (!targetFolderId) {
+      const rootFolderId = Deno.env.get('GOOGLE_DRIVE_FOLDER_ID');
+      if (!rootFolderId) {
         throw new Error(
           'Missing GOOGLE_DRIVE_FOLDER_ID. Create a Drive folder in your account, share it with the service account (client_email), then set GOOGLE_DRIVE_FOLDER_ID to that folder id.'
         );
       }
 
-      // Validate folder access so the error is actionable.
+      // Validate root folder access
       const folderCheckRes = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${targetFolderId}?fields=id,name,mimeType&supportsAllDrives=true`,
+        `https://www.googleapis.com/drive/v3/files/${rootFolderId}?fields=id,name,mimeType&supportsAllDrives=true`,
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
       const folderCheck = await folderCheckRes.json().catch(() => ({}));
       if (!folderCheckRes.ok) {
         console.error('Folder access check failed:', {
-          targetFolderId,
+          rootFolderId,
           status: folderCheckRes.status,
           body: folderCheck,
         });
@@ -224,7 +287,14 @@ serve(async (req) => {
         throw new Error('GOOGLE_DRIVE_FOLDER_ID is not a folder id. Copy it from a Drive URL containing /folders/<id>.');
       }
 
-      console.log(`Uploading to folder: ${targetFolderId} (${folderCheck?.name || 'unknown'})`);
+      console.log(`Root folder: ${rootFolderId} (${folderCheck?.name || 'unknown'})`);
+
+      // Get or create resident-specific folder
+      let targetFolderId = rootFolderId;
+      if (residentName) {
+        targetFolderId = await getOrCreateResidentFolder(accessToken, residentName, rootFolderId);
+        console.log(`Using resident folder: ${targetFolderId} for "${residentName}"`);
+      }
 
       const result = await uploadToDrive(accessToken, fileName, fileContent, mimeType, targetFolderId);
       console.log(`File uploaded successfully: ${result.id}`);

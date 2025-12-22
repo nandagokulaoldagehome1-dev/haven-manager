@@ -1,80 +1,103 @@
-# Welcome to your Lovable project
+# Nanda Gokula Old Age Home Management System
 
-## Project info
+A comprehensive management system for old age homes built with React, TypeScript, and Supabase.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## Features
 
-## How can I edit this code?
+- **Resident Management**: Track resident information, medical details, and emergency contacts
+- **Room Management**: Manage room assignments and availability
+- **Payment Tracking**: Record and manage resident payments
+- **Document Management**: Store and organize resident documents in Google Drive
+- **Food Menu**: Weekly meal planning and management
+- **Reminders**: Set and track important reminders
+- **User Roles**: Super admin and admin role-based access control
 
-There are several ways of editing your application.
+## Technology Stack
 
-**Use Lovable**
+- **Frontend**: React, TypeScript, Vite, Tailwind CSS, shadcn-ui
+- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions, Storage)
+- **File Storage**: Google Drive integration for documents
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## Google Drive Integration
 
-Changes made via Lovable will be committed automatically to this repo.
+Documents are stored in Google Drive with automatic resident-wise folder organization.
 
-**Use your preferred IDE**
+### Setup Requirements
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+1. **Google Cloud Project**: Create a project in [Google Cloud Console](https://console.cloud.google.com/)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+2. **Service Account**: Create a service account with Google Drive API access
+   - Go to IAM & Admin → Service Accounts
+   - Create a new service account
+   - Download the JSON key file
 
-Follow these steps:
+3. **Enable Google Drive API**: 
+   - Go to APIs & Services → Enable APIs
+   - Search for "Google Drive API" and enable it
+
+4. **Create Root Folder**:
+   - Create a folder in Google Drive named "Residents-Documents" (or any name)
+   - Share this folder with the service account email (found in the JSON key as `client_email`)
+   - Grant "Editor" access
+   - Copy the folder ID from the URL: `https://drive.google.com/drive/folders/<FOLDER_ID>`
+
+5. **Configure Secrets** (in Supabase Edge Function Secrets):
+   - `GOOGLE_SERVICE_ACCOUNT_JSON`: The full JSON content of your service account key
+   - `GOOGLE_DRIVE_FOLDER_ID`: The folder ID where documents will be stored
+
+### How It Works
+
+- Documents are uploaded via the `upload-to-drive` edge function
+- Each resident gets their own subfolder automatically created
+- Files are made publicly viewable for easy access
+- File references (Google Drive file ID and view URL) are stored in the database
+
+### Folder Structure
+
+```
+Residents-Documents/
+├── Resident Name 1/
+│   ├── aadhaar_1234567890.pdf
+│   ├── medical_report_1234567891.pdf
+│   └── ...
+├── Resident Name 2/
+│   ├── pan_1234567892.pdf
+│   └── ...
+└── ...
+```
+
+## Google OAuth Integration (Admin Settings)
+
+For admin users to connect their personal Google Drive (optional):
+
+1. Create OAuth 2.0 credentials in Google Cloud Console
+2. Add the callback URL: `https://<project-id>.supabase.co/functions/v1/google-drive-callback`
+3. Configure secrets:
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+
+## Local Development
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
+# Clone the repository
 git clone <YOUR_GIT_URL>
 
-# Step 2: Navigate to the project directory.
+# Navigate to project directory
 cd <YOUR_PROJECT_NAME>
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Install dependencies
+npm install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Start development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Deployment
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click Share → Publish.
 
-**Use GitHub Codespaces**
+## Custom Domain
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+To connect a custom domain, navigate to Project → Settings → Domains and click Connect Domain.
 
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## Google Drive Uploads
-
-- Edge function: supabase/functions/upload-to-drive/index.ts handles Google Drive uploads.
-- Folder: documents are stored in a Drive folder named "Residents-Documents" (auto-created if missing).
-- Service account: set an environment variable `GOOGLE_SERVICE_ACCOUNT_JSON` with the JSON key for your Google Cloud service account.
-- Google Cloud: the project associated with the service account should be named "My First Project" in Google Cloud Console.
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Read more: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
