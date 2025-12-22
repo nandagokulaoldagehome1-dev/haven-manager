@@ -17,6 +17,7 @@ export type Database = {
       documents: {
         Row: {
           document_type: string
+          drive_file_id: string | null
           file_name: string
           file_url: string
           id: string
@@ -25,6 +26,7 @@ export type Database = {
         }
         Insert: {
           document_type: string
+          drive_file_id?: string | null
           file_name: string
           file_url: string
           id?: string
@@ -33,6 +35,7 @@ export type Database = {
         }
         Update: {
           document_type?: string
+          drive_file_id?: string | null
           file_name?: string
           file_url?: string
           id?: string

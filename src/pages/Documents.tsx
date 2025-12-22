@@ -24,11 +24,10 @@ import {
   Search,
   FileText,
   Upload,
-  Download,
   Trash2,
   Loader2,
   Eye,
-  Filter
+  HardDrive
 } from 'lucide-react';
 
 interface Document {
@@ -38,6 +37,7 @@ interface Document {
   document_type: string;
   file_name: string;
   file_url: string;
+  drive_file_id?: string;
   uploaded_at: string;
 }
 
@@ -123,6 +123,20 @@ export default function Documents() {
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:application/pdf;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+    });
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !formData.resident_id || !formData.document_type) return;
@@ -130,50 +144,60 @@ export default function Documents() {
     setUploading(true);
 
     try {
+      // Get resident name for folder creation
+      const resident = residents.find(r => r.id === formData.resident_id);
+      if (!resident) throw new Error('Resident not found');
+
+      // Convert file to base64
+      const fileContent = await fileToBase64(selectedFile);
+      const mimeType = selectedFile.type || 'application/octet-stream';
+
+      // Generate unique filename
       const fileExt = selectedFile.name.split('.').pop() || 'bin';
       const safeType = formData.document_type || 'document';
-      const filePath = `${formData.resident_id}/${safeType}_${Date.now()}.${fileExt}`;
+      const fileName = `${safeType}_${Date.now()}.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
-        .from('medical_documents')
-        .upload(filePath, selectedFile, {
-          cacheControl: '3600',
-          upsert: false,
-          contentType: selectedFile.type || undefined,
-        });
+      // Upload to Google Drive via edge function
+      const { data: uploadResult, error: uploadError } = await supabase.functions.invoke('upload-to-drive', {
+        body: {
+          action: 'upload',
+          fileName,
+          fileContent,
+          mimeType,
+          residentName: resident.full_name,
+        },
+      });
 
       if (uploadError) throw uploadError;
+      if (!uploadResult?.success) {
+        throw new Error(uploadResult?.error || 'Upload failed');
+      }
 
-      const { data: publicUrlData } = supabase.storage
-        .from('medical_documents')
-        .getPublicUrl(filePath);
-
-      const publicUrl = publicUrlData?.publicUrl;
-      if (!publicUrl) throw new Error('Failed to get public URL for uploaded file');
-
-      // Store only the URL in the database (file stays in Supabase Storage)
+      // Store in database with Google Drive reference
       const { error: dbError } = await supabase.from('documents').insert({
         resident_id: formData.resident_id,
         document_type: formData.document_type,
         file_name: selectedFile.name,
-        file_url: publicUrl,
+        file_url: uploadResult.webViewLink,
+        drive_file_id: uploadResult.id,
       });
 
       if (dbError) throw dbError;
 
       toast({
         title: 'Document Uploaded',
-        description: 'The document has been uploaded successfully.',
+        description: 'The document has been uploaded to Google Drive.',
       });
 
       setDialogOpen(false);
       resetForm();
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Upload error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload document';
       toast({
         title: 'Upload Failed',
-        description: error.message || 'Failed to upload document',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -185,11 +209,22 @@ export default function Documents() {
     if (!confirm('Are you sure you want to delete this document?')) return;
 
     try {
-      // Check if it's a Google Drive file
-      if (doc.file_url.startsWith('gdrive:')) {
+      // Delete from Google Drive if we have the file ID
+      if (doc.drive_file_id) {
+        const response = await supabase.functions.invoke('upload-to-drive', {
+          body: {
+            action: 'delete',
+            fileId: doc.drive_file_id,
+          },
+        });
+
+        if (response.error || !response.data?.success) {
+          console.warn('Could not delete from Google Drive:', response.data?.error);
+        }
+      } else if (doc.file_url.startsWith('gdrive:')) {
+        // Legacy format: gdrive:fileId|viewLink
         const fileId = doc.file_url.replace('gdrive:', '').split('|')[0];
         
-        // Delete from Google Drive
         const response = await supabase.functions.invoke('upload-to-drive', {
           body: {
             action: 'delete',
@@ -200,7 +235,7 @@ export default function Documents() {
         if (response.error || !response.data?.success) {
           console.warn('Could not delete from Google Drive:', response.data?.error);
         }
-      } else {
+      } else if (!doc.file_url.includes('drive.google.com')) {
         // Legacy: Delete from Supabase storage
         const urlParts = doc.file_url.split('/');
         const filePath = urlParts.slice(-2).join('/');
@@ -223,20 +258,14 @@ export default function Documents() {
       });
 
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete document';
       toast({
         title: 'Error',
-        description: error.message || 'Failed to delete document',
+        description: errorMessage,
         variant: 'destructive',
       });
     }
-  };
-
-  const getViewUrl = (fileUrl: string): string => {
-    if (fileUrl.startsWith('gdrive:')) {
-      return fileUrl.split('|')[1] || fileUrl;
-    }
-    return fileUrl;
   };
 
   const resetForm = () => {
@@ -247,13 +276,17 @@ export default function Documents() {
   const filteredDocuments = documents.filter(doc => {
     const matchesSearch = doc.file_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       doc.resident_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesResident = !filterResident || doc.resident_id === filterResident;
-    const matchesType = !filterType || doc.document_type === filterType;
+    const matchesResident = !filterResident || filterResident === 'all' || doc.resident_id === filterResident;
+    const matchesType = !filterType || filterType === 'all' || doc.document_type === filterType;
     return matchesSearch && matchesResident && matchesType;
   });
 
   const getDocumentTypeLabel = (type: string) => {
     return documentTypes.find(t => t.value === type)?.label || type;
+  };
+
+  const isGoogleDriveFile = (doc: Document) => {
+    return doc.drive_file_id || doc.file_url.includes('drive.google.com') || doc.file_url.startsWith('gdrive:');
   };
 
   return (
@@ -263,7 +296,7 @@ export default function Documents() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="page-header mb-0">
             <h1 className="page-title">Documents</h1>
-            <p className="page-description">Manage resident documents and medical records</p>
+            <p className="page-description">Manage resident documents stored in Google Drive</p>
           </div>
           <Dialog open={dialogOpen} onOpenChange={(open) => {
             setDialogOpen(open);
@@ -277,7 +310,10 @@ export default function Documents() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Upload Document</DialogTitle>
+                <DialogTitle className="flex items-center gap-2">
+                  <HardDrive className="w-5 h-5" />
+                  Upload to Google Drive
+                </DialogTitle>
               </DialogHeader>
               <form onSubmit={handleUpload} className="space-y-4 mt-4">
                 <div>
@@ -297,6 +333,9 @@ export default function Documents() {
                       ))}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Document will be stored in resident's folder
+                  </p>
                 </div>
                 <div>
                   <Label>Document Type</Label>
@@ -357,7 +396,7 @@ export default function Documents() {
                   </Button>
                   <Button type="submit" disabled={uploading || !selectedFile}>
                     {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-                    Upload
+                    {uploading ? 'Uploading...' : 'Upload'}
                   </Button>
                 </div>
               </form>
@@ -419,14 +458,26 @@ export default function Documents() {
               >
                 <div className="flex items-start gap-3">
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
-                    <FileText className="w-6 h-6 text-primary" />
+                    {isGoogleDriveFile(doc) ? (
+                      <HardDrive className="w-6 h-6 text-primary" />
+                    ) : (
+                      <FileText className="w-6 h-6 text-primary" />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="font-medium truncate">{doc.file_name}</h3>
                     <p className="text-sm text-muted-foreground">{doc.resident_name}</p>
-                    <span className="badge-primary mt-1">
-                      {getDocumentTypeLabel(doc.document_type)}
-                    </span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="badge-primary">
+                        {getDocumentTypeLabel(doc.document_type)}
+                      </span>
+                      {isGoogleDriveFile(doc) && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <HardDrive className="w-3 h-3" />
+                          Drive
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -435,7 +486,7 @@ export default function Documents() {
                     variant="outline" 
                     size="sm" 
                     className="flex-1"
-                    onClick={() => window.open(getViewUrl(doc.file_url), '_blank')}
+                    onClick={() => window.open(doc.file_url, '_blank')}
                   >
                     <Eye className="w-4 h-4" />
                     View
@@ -454,12 +505,12 @@ export default function Documents() {
           </div>
         ) : (
           <div className="card-elevated p-12 text-center">
-            <FileText className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
+            <HardDrive className="w-16 h-16 text-muted-foreground/30 mx-auto mb-4" />
             <h3 className="text-lg font-semibold mb-2">No documents found</h3>
             <p className="text-muted-foreground mb-4">
               {searchQuery || filterResident || filterType 
                 ? 'Try different filters'
-                : 'Upload your first document to get started'
+                : 'Upload your first document to Google Drive'
               }
             </p>
             {!searchQuery && (
