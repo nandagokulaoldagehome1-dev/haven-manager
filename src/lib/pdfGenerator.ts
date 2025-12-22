@@ -22,124 +22,229 @@ interface ReceiptData {
 export function generateReceiptPDF(data: ReceiptData): jsPDF {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   
-  // Header
-  doc.setFillColor(59, 130, 246);
-  doc.rect(0, 0, pageWidth, 40, 'F');
+  // Define colors
+  const primaryColor = [41, 128, 185]; // Professional blue
+  const accentColor = [52, 73, 94]; // Dark blue-gray
+  const lightGray = [242, 245, 247];
+  const borderColor = [200, 210, 220];
+  const textDark = [33, 47, 61];
+  const successGreen = [46, 204, 113]; // For paid status
   
+  // Background - subtle gradient effect with rectangles
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 0, pageWidth, pageHeight, 'F');
+  
+  // Top decorative bar
+  doc.setFillColor(...primaryColor);
+  doc.rect(0, 0, pageWidth, 35, 'F');
+  
+  // Organization name and logo area
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(24);
+  doc.setFontSize(28);
   doc.setFont('helvetica', 'bold');
-  doc.text('PAYMENT RECEIPT', pageWidth / 2, 20, { align: 'center' });
+  doc.text('CARE HOME', 20, 20);
   
-  doc.setFontSize(12);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Receipt #${data.receiptNumber}`, pageWidth / 2, 32, { align: 'center' });
+  doc.text('Professional Care Management System', 20, 28);
   
-  // Reset text color
-  doc.setTextColor(0, 0, 0);
-  
-  // Resident and Date Info
-  let y = 55;
+  // Receipt label on the right
+  doc.setFillColor(...accentColor);
+  doc.rect(pageWidth - 80, 5, 75, 25, 'F');
+  doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('Resident:', 20, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.residentName, 55, y);
-  
-  doc.setFont('helvetica', 'bold');
-  doc.text('Date:', pageWidth - 80, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(new Date(data.paymentDate).toLocaleDateString('en-IN'), pageWidth - 55, y);
-  
-  y += 10;
-  doc.setFont('helvetica', 'bold');
-  doc.text('For Month:', 20, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.monthYear, 55, y);
-  
-  doc.setFont('helvetica', 'bold');
-  doc.text('Method:', pageWidth - 80, y);
-  doc.setFont('helvetica', 'normal');
-  doc.text(data.paymentMethod.replace('_', ' ').toUpperCase(), pageWidth - 55, y);
-  
-  // Divider
-  y += 15;
-  doc.setDrawColor(200, 200, 200);
-  doc.line(20, y, pageWidth - 20, y);
-  
-  // Charges Table Header
-  y += 15;
-  doc.setFillColor(240, 240, 240);
-  doc.rect(20, y - 5, pageWidth - 40, 10, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.text('RECEIPT', pageWidth - 42, 15, { align: 'center' });
   doc.setFontSize(10);
+  doc.text(`#${data.receiptNumber}`, pageWidth - 42, 25, { align: 'center' });
+  
+  // Reset to black text
+  doc.setTextColor(...textDark);
+  
+  // Main content area with subtle background
+  const contentStartY = 45;
+  doc.setFillColor(...lightGray);
+  doc.rect(15, contentStartY - 5, pageWidth - 30, pageHeight - contentStartY - 50, 'F');
+  
+  // Resident Information Section
+  let y = contentStartY + 10;
+  
+  // Section title
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...primaryColor);
+  doc.text('RESIDENT INFORMATION', 20, y);
+  
+  y += 8;
+  doc.setDrawColor(...borderColor);
+  doc.setLineWidth(0.5);
+  doc.line(20, y - 2, pageWidth - 20, y - 2);
+  
+  y += 8;
+  doc.setTextColor(...textDark);
+  doc.setFontSize(10);
+  
+  // Left column
+  doc.setFont('helvetica', 'bold');
+  doc.text('Resident Name:', 20, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.residentName, 60, y);
+  
+  // Right column
+  doc.setFont('helvetica', 'bold');
+  doc.text('Payment Date:', pageWidth - 80, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(new Date(data.paymentDate).toLocaleDateString('en-IN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }), pageWidth - 40, y);
+  
+  y += 8;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Billing Period:', 20, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.monthYear, 60, y);
+  
+  doc.setFont('helvetica', 'bold');
+  doc.text('Payment Method:', pageWidth - 80, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(data.paymentMethod.replace(/_/g, ' ').toUpperCase(), pageWidth - 40, y);
+  
+  // Charges Section
+  y += 18;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(...primaryColor);
+  doc.text('CHARGES BREAKDOWN', 20, y);
+  
+  y += 8;
+  doc.setDrawColor(...borderColor);
+  doc.line(20, y - 2, pageWidth - 20, y - 2);
+  
+  // Table header
+  y += 8;
+  doc.setFillColor(...primaryColor);
+  doc.rect(20, y - 6, pageWidth - 40, 10, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
   doc.text('Description', 25, y);
-  doc.text('Date', 100, y);
+  doc.text('Date', 90, y);
   doc.text('Amount', pageWidth - 45, y, { align: 'right' });
   
-  // Base Rent
-  y += 15;
+  // Base Rent Row
+  y += 12;
+  doc.setFillColor(255, 255, 255);
+  doc.rect(20, y - 6, pageWidth - 40, 10, 'F');
+  
+  doc.setTextColor(...textDark);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Monthly Rent/Base Charges', 25, y);
   doc.setFont('helvetica', 'normal');
-  doc.text('Monthly Rent/Charges', 25, y);
-  doc.text('-', 100, y);
+  doc.text('—', 90, y);
   doc.text(`₹${data.baseAmount.toLocaleString('en-IN')}`, pageWidth - 45, y, { align: 'right' });
   
   // Extra Charges
   if (data.extraCharges.length > 0) {
-    y += 5;
-    doc.setDrawColor(230, 230, 230);
-    doc.line(20, y, pageWidth - 20, y);
+    y += 12;
+    doc.setFillColor(...lightGray);
+    doc.rect(20, y - 6, pageWidth - 40, 10, 'F');
     
-    y += 10;
+    doc.setTextColor(...primaryColor);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.text('ADDITIONAL CHARGES', 25, y);
     
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
-    
     data.extraCharges.forEach((charge) => {
       y += 10;
+      doc.setFillColor(255, 255, 255);
+      doc.rect(20, y - 6, pageWidth - 40, 10, 'F');
+      
+      doc.setTextColor(...textDark);
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      
       const categoryLabel = charge.category.charAt(0).toUpperCase() + charge.category.slice(1);
-      doc.text(`${charge.description} (${categoryLabel})`, 25, y);
-      doc.text(new Date(charge.date_charged).toLocaleDateString('en-IN'), 100, y);
+      const displayText = `${charge.description} (${categoryLabel})`;
+      doc.text(displayText, 25, y);
+      doc.text(new Date(charge.date_charged).toLocaleDateString('en-IN'), 90, y);
       doc.text(`₹${Number(charge.amount).toLocaleString('en-IN')}`, pageWidth - 45, y, { align: 'right' });
     });
   }
   
-  // Total Section
-  y += 15;
-  doc.setDrawColor(100, 100, 100);
-  doc.line(20, y, pageWidth - 20, y);
+  // Total Section - Professional Summary Box
+  y += 18;
   
-  y += 12;
-  doc.setFillColor(59, 130, 246);
-  doc.rect(pageWidth - 100, y - 8, 80, 14, 'F');
+  // Summary box background
+  doc.setFillColor(...primaryColor);
+  doc.rect(pageWidth - 120, y - 8, 100, 28, 'F');
   
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
   doc.setTextColor(255, 255, 255);
-  doc.text('TOTAL:', pageWidth - 95, y);
-  doc.text(`₹${data.totalAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Subtotal:', pageWidth - 115, y);
+  doc.text(`₹${data.baseAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
   
-  doc.setTextColor(0, 0, 0);
-  
-  // Notes
-  if (data.notes) {
-    y += 25;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'italic');
-    doc.text(`Notes: ${data.notes}`, 20, y);
+  y += 8;
+  if (data.extraCharges.length > 0) {
+    const extraTotal = data.extraCharges.reduce((sum, charge) => sum + charge.amount, 0);
+    doc.text('Additional Charges:', pageWidth - 115, y);
+    doc.text(`₹${extraTotal.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
+    y += 8;
   }
   
-  // Footer
-  const footerY = doc.internal.pageSize.getHeight() - 30;
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TOTAL PAYABLE:', pageWidth - 115, y);
+  doc.setFontSize(14);
+  doc.text(`₹${data.totalAmount.toLocaleString('en-IN')}`, pageWidth - 25, y, { align: 'right' });
+  
+  // Payment Status Badge
+  y += 18;
+  doc.setFillColor(...successGreen);
+  doc.rect(20, y - 6, 50, 10, 'F');
+  
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('✓ PAID', 45, y, { align: 'center' });
+  
+  // Notes section
+  if (data.notes) {
+    y += 15;
+    doc.setTextColor(...textDark);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    
+    // Notes box
+    doc.setDrawColor(...borderColor);
+    doc.setLineWidth(0.3);
+    doc.rect(20, y - 8, pageWidth - 40, 15, 'S');
+    
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Notes:', 23, y - 3);
+    doc.setFont('helvetica', 'italic');
+    doc.text(data.notes, 23, y + 3);
+  }
+  
+  // Footer with decorative line
+  const footerY = pageHeight - 25;
+  doc.setDrawColor(...primaryColor);
+  doc.setLineWidth(1);
+  doc.line(20, footerY - 8, pageWidth - 20, footerY - 8);
+  
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(128, 128, 128);
-  doc.text('This is a computer-generated receipt.', pageWidth / 2, footerY, { align: 'center' });
-  doc.text(`Generated on ${new Date().toLocaleString('en-IN')}`, pageWidth / 2, footerY + 8, { align: 'center' });
+  doc.setTextColor(120, 130, 140);
+  doc.text('This is a computer-generated receipt. No signature required.', pageWidth / 2, footerY, { align: 'center' });
+  doc.setFontSize(7);
+  doc.text(`Generated on ${new Date().toLocaleString('en-IN')} | Receipt System v1.0`, pageWidth / 2, footerY + 6, { align: 'center' });
   
   return doc;
 }
@@ -161,3 +266,4 @@ export function printReceiptPDF(data: ReceiptData) {
     };
   }
 }
+
