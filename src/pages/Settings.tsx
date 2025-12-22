@@ -272,7 +272,7 @@ export default function Settings() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Page Header */}
         <div className="page-header">
           <h1 className="page-title">Settings</h1>
@@ -281,27 +281,27 @@ export default function Settings() {
 
         {/* Admin Information - Only for Super Admin */}
         {isSuper && (
-          <div className="card-elevated p-6">
-            <div className="mb-6">
-              <h2 className="text-lg font-semibold flex items-center gap-2">
+          <div className="card-elevated p-4 md:p-6">
+            <div className="mb-4 md:mb-6">
+              <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-primary" />
                 Administrator
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-xs md:text-sm text-muted-foreground mt-1">
                 You are logged in as the super administrator
               </p>
             </div>
 
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-primary/10">
+            <div className="flex items-center gap-3 p-3 md:p-4 rounded-lg bg-muted/50">
+              <div className="w-10 h-10 flex-shrink-0 rounded-full flex items-center justify-center bg-primary/10">
                 <ShieldCheck className="w-5 h-5 text-primary" />
               </div>
-              <div>
-                <p className="font-medium flex items-center gap-2">
-                  {user?.email}
-                  <span className="text-xs text-muted-foreground">(You)</span>
+              <div className="min-w-0 flex-1">
+                <p className="font-medium flex items-center gap-2 text-sm md:text-base truncate">
+                  <span className="truncate">{user?.email}</span>
+                  <span className="text-xs text-muted-foreground flex-shrink-0">(You)</span>
                 </p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs md:text-sm text-muted-foreground">
                   Super Admin
                 </p>
               </div>
@@ -311,20 +311,20 @@ export default function Settings() {
 
         {/* Admin Management - Only for Super Admin */}
         {isSuper && (
-          <div className="card-elevated p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-primary" />
-                  Admin Management
+          <div className="card-elevated p-4 md:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4 md:mb-6">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+                  <Shield className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span className="truncate">Admin Management</span>
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   Invite and manage admin users (full access, no Drive connection)
                 </p>
               </div>
               <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
                 <DialogTrigger asChild>
-                  <Button>
+                  <Button className="w-full sm:w-auto flex-shrink-0">
                     <UserPlus className="w-4 h-4" />
                     Invite Admin
                   </Button>
@@ -367,30 +367,30 @@ export default function Settings() {
                 <Loader2 className="w-5 h-5 animate-spin text-primary" />
               </div>
             ) : admins.length > 0 ? (
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {admins.map((admin) => (
                   <div
                     key={admin.id}
-                    className="flex items-center justify-between p-4 rounded-lg bg-muted/50"
+                    className="flex items-center justify-between p-3 md:p-4 rounded-lg bg-muted/50 gap-2"
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                      <div className={`w-9 h-9 md:w-10 md:h-10 flex-shrink-0 rounded-full flex items-center justify-center ${
                         admin.role === 'super_admin' ? 'bg-primary/10' : 'bg-secondary'
                       }`}>
                         {admin.role === 'super_admin' ? (
-                          <ShieldCheck className="w-5 h-5 text-primary" />
+                          <ShieldCheck className="w-4 h-4 md:w-5 md:h-5 text-primary" />
                         ) : (
-                          <Shield className="w-5 h-5 text-muted-foreground" />
+                          <Shield className="w-4 h-4 md:w-5 md:h-5 text-muted-foreground" />
                         )}
                       </div>
-                      <div>
-                        <p className="font-medium flex items-center gap-2">
-                          {admin.email || admin.user_id.slice(0, 8)}
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium flex items-center gap-2 text-sm md:text-base">
+                          <span className="truncate">{admin.email || admin.user_id.slice(0, 8)}</span>
                           {admin.user_id === user?.id && (
-                            <span className="text-xs text-muted-foreground">(You)</span>
+                            <span className="text-xs text-muted-foreground flex-shrink-0">(You)</span>
                           )}
                         </p>
-                        <p className="text-sm text-muted-foreground capitalize">
+                        <p className="text-xs md:text-sm text-muted-foreground capitalize truncate">
                           {admin.role.replace('_', ' ')}
                         </p>
                       </div>
@@ -400,7 +400,7 @@ export default function Settings() {
                         variant="ghost"
                         size="sm"
                         onClick={() => confirmRemoveAdmin(admin)}
-                        className="text-destructive hover:text-destructive"
+                        className="text-destructive hover:text-destructive flex-shrink-0"
                       >
                         <Trash2 className="w-4 h-4" />
                       </Button>
@@ -418,14 +418,14 @@ export default function Settings() {
 
         {/* Google Drive Integration - Only for Super Admin */}
         {isSuper && (
-          <div className="card-elevated p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h2 className="text-lg font-semibold flex items-center gap-2">
-                  <HardDrive className="w-5 h-5 text-primary" />
-                  Google Drive Integration
+          <div className="card-elevated p-4 md:p-6">
+            <div className="mb-4 md:mb-6">
+              <div className="min-w-0">
+                <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+                  <HardDrive className="w-5 h-5 text-primary flex-shrink-0" />
+                  <span className="truncate">Google Drive Integration</span>
                 </h2>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs md:text-sm text-muted-foreground mt-1">
                   Connect Google Drive for document backup and storage
                 </p>
               </div>
@@ -436,12 +436,12 @@ export default function Settings() {
                 <Loader2 className="w-6 h-6 animate-spin text-primary" />
               </div>
             ) : driveStatus.connected ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-green-500/10 border border-green-500/20">
-                  <CheckCircle className="w-5 h-5 text-green-500" />
-                  <div className="flex-1">
-                    <p className="font-medium text-green-500">Connected</p>
-                    <p className="text-sm text-muted-foreground">
+              <div className="space-y-3 md:space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-green-500/10 border border-green-500/20">
+                  <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-green-500 text-sm md:text-base">Connected</p>
+                    <p className="text-xs md:text-sm text-muted-foreground truncate">
                       {driveStatus.email}
                     </p>
                   </div>
@@ -451,42 +451,45 @@ export default function Settings() {
                       size="sm" 
                       onClick={handleConnectDrive}
                       disabled={connecting}
+                      className="w-full sm:w-auto flex-shrink-0"
                     >
                       {connecting ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         <>
                           <ExternalLink className="w-4 h-4" />
-                          Reconnect
+                          <span className="ml-2">Reconnect</span>
                         </>
                       )}
                     </Button>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-xs md:text-sm text-muted-foreground">
                   Documents will be automatically backed up to your connected Google Drive account.
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-                  <XCircle className="w-5 h-5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="font-medium">Not Connected</p>
-                    <p className="text-sm text-muted-foreground">
+              <div className="space-y-3 md:space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-muted/50">
+                  <XCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm md:text-base">Not Connected</p>
+                    <p className="text-xs md:text-sm text-muted-foreground">
                       Connect your Google Drive to enable document backup
                     </p>
                   </div>
                   <Button 
                     onClick={handleConnectDrive}
                     disabled={connecting}
+                    className="w-full sm:w-auto flex-shrink-0"
                   >
                     {connecting ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <>
                         <ExternalLink className="w-4 h-4" />
-                        Connect Google Drive
+                        <span className="ml-2 hidden sm:inline">Connect Google Drive</span>
+                        <span className="ml-2 sm:hidden">Connect Drive</span>
                       </>
                     )}
                   </Button>
@@ -497,30 +500,31 @@ export default function Settings() {
         )}
 
         {/* Account Settings */}
-        <div className="card-elevated p-6">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+        <div className="card-elevated p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-4 flex items-center gap-2">
             <User className="w-5 h-5 text-primary" />
             Your Account
           </h2>
           
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-              <Mail className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <p className="text-sm text-muted-foreground">Email</p>
-                <p className="font-medium">{user?.email}</p>
+          <div className="space-y-3 md:space-y-4">
+            <div className="flex items-center gap-3 p-3 md:p-4 rounded-lg bg-muted/50">
+              <Mail className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-xs md:text-sm text-muted-foreground">Email</p>
+                <p className="font-medium text-sm md:text-base truncate">{user?.email}</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3 p-4 rounded-lg bg-muted/50">
-              <Key className="w-5 h-5 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm text-muted-foreground">Password</p>
-                <p className="font-medium">••••••••</p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 md:p-4 rounded-lg bg-muted/50">
+              <Key className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs md:text-sm text-muted-foreground">Password</p>
+                <p className="font-medium text-sm md:text-base">••••••••</p>
               </div>
               <Button 
                 variant="outline" 
                 size="sm"
+                className="w-full sm:w-auto flex-shrink-0"
                 onClick={async () => {
                   const { error } = await supabase.auth.resetPasswordForEmail(
                     user?.email || '',
@@ -547,15 +551,15 @@ export default function Settings() {
         </div>
 
         {/* System Info */}
-        <div className="card-elevated p-6">
-          <h2 className="text-lg font-semibold mb-4">System Information</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-muted-foreground">Version</p>
+        <div className="card-elevated p-4 md:p-6">
+          <h2 className="text-base md:text-lg font-semibold mb-3 md:mb-4">System Information</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 text-sm">
+            <div className="p-3 md:p-4 rounded-lg bg-muted/50">
+              <p className="text-xs md:text-sm text-muted-foreground">Version</p>
               <p className="font-medium">1.0.0</p>
             </div>
-            <div className="p-4 rounded-lg bg-muted/50">
-              <p className="text-muted-foreground">Environment</p>
+            <div className="p-3 md:p-4 rounded-lg bg-muted/50">
+              <p className="text-xs md:text-sm text-muted-foreground">Environment</p>
               <p className="font-medium">Production</p>
             </div>
           </div>

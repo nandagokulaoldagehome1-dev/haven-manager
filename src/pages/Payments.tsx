@@ -672,76 +672,82 @@ PDF receipt downloading separately...`;
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : filteredPayments.length > 0 ? (
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3">
             {filteredPayments.map((payment, index) => (
               <div 
                 key={payment.id}
                 className="card-elevated overflow-hidden animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="w-12 h-12 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
-                      <CreditCard className="w-6 h-6 text-success" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-semibold">{payment.resident_name}</h3>
-                          <p className="text-sm text-muted-foreground">
-                            Receipt #{payment.receipt_number}
-                          </p>
+                <div className="p-3 md:p-4">
+                  <div className="flex flex-col gap-3 md:gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-success/10 flex items-center justify-center flex-shrink-0">
+                        <CreditCard className="w-5 h-5 md:w-6 md:h-6 text-success" />
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="text-sm md:text-base font-semibold truncate">{payment.resident_name}</h3>
+                            <p className="text-xs md:text-sm text-muted-foreground truncate">
+                              Receipt #{payment.receipt_number}
+                            </p>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <p className="text-base md:text-lg font-bold flex items-center justify-end gap-1">
+                              <IndianRupee className="w-3 h-3 md:w-4 md:h-4" />
+                              {payment.amount.toLocaleString()}
+                            </p>
+                            <span className="badge-success text-xs">Paid</span>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="font-bold text-lg flex items-center justify-end gap-1">
-                            <IndianRupee className="w-4 h-4" />
-                            {payment.amount.toLocaleString()}
-                          </p>
-                          <span className="badge-success">Paid</span>
+
+                        <div className="flex flex-wrap items-center gap-2 md:gap-4 mt-2 md:mt-3 text-xs md:text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3 md:w-4 md:h-4" />
+                            <span className="truncate">{new Date(payment.payment_date).toLocaleDateString()}</span>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <FileText className="w-3 h-3 md:w-4 md:h-4" />
+                            <span className="truncate">For: {payment.month_year}</span>
+                          </span>
+                          <span className="capitalize truncate">{payment.payment_method.replace('_', ' ')}</span>
+                          {payment.extra_charges && payment.extra_charges.length > 0 && (
+                            <Badge variant="secondary" className="text-xs">
+                              +{payment.extra_charges.length} extra
+                            </Badge>
+                          )}
                         </div>
                       </div>
-
-                      <div className="flex flex-wrap items-center gap-4 mt-3 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {new Date(payment.payment_date).toLocaleDateString()}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <FileText className="w-4 h-4" />
-                          For: {payment.month_year}
-                        </span>
-                        <span className="capitalize">{payment.payment_method.replace('_', ' ')}</span>
-                        {payment.extra_charges && payment.extra_charges.length > 0 && (
-                          <Badge variant="secondary" className="text-xs">
-                            +{payment.extra_charges.length} extra charges
-                          </Badge>
-                        )}
-                      </div>
                     </div>
 
-                    <div className="flex items-center gap-2 sm:flex-shrink-0">
+                    <div className="flex flex-wrap items-center gap-2">
                       {payment.extra_charges && payment.extra_charges.length > 0 && (
                         <Button 
                           variant="ghost" 
                           size="sm"
+                          className="flex-shrink-0"
                           onClick={() => setExpandedPayment(expandedPayment === payment.id ? null : payment.id)}
                         >
                           {expandedPayment === payment.id ? (
-                            <ChevronUp className="w-4 h-4" />
+                            <><ChevronUp className="w-4 h-4" /><span className="ml-1 hidden sm:inline">Hide</span></>
                           ) : (
-                            <ChevronDown className="w-4 h-4" />
+                            <><ChevronDown className="w-4 h-4" /><span className="ml-1 hidden sm:inline">Details</span></>
                           )}
                         </Button>
                       )}
-                      <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(payment)}>
+                      <Button variant="outline" size="sm" onClick={() => handleDownloadPDF(payment)} className="flex-1 sm:flex-initial">
                         <Download className="w-4 h-4" />
+                        <span className="ml-1 hidden sm:inline">Download</span>
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => handlePrintPDF(payment)}>
+                      <Button variant="outline" size="sm" onClick={() => handlePrintPDF(payment)} className="flex-1 sm:flex-initial">
                         <Printer className="w-4 h-4" />
+                        <span className="ml-1 hidden sm:inline">Print</span>
                       </Button>
-                      <Button variant="outline" size="sm" onClick={() => shareOnWhatsApp(payment)}>
+                      <Button variant="outline" size="sm" onClick={() => shareOnWhatsApp(payment)} className="flex-1 sm:flex-initial">
                         <Share2 className="w-4 h-4" />
+                        <span className="ml-1 hidden sm:inline">Share</span>
                       </Button>
                     </div>
                   </div>
@@ -749,25 +755,27 @@ PDF receipt downloading separately...`;
 
                 {/* Expanded Extra Charges */}
                 {expandedPayment === payment.id && payment.extra_charges && payment.extra_charges.length > 0 && (
-                  <div className="border-t bg-muted/30 p-4">
+                  <div className="border-t bg-muted/30 p-3 md:p-4">
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Charge Breakdown</p>
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center justify-between text-xs md:text-sm">
                         <span>Base Charges</span>
-                        <span className="font-medium">₹{payment.base_amount?.toLocaleString()}</span>
+                        <span className="font-medium">Rs. {payment.base_amount?.toLocaleString()}</span>
                       </div>
                       {payment.extra_charges.map((charge) => {
                         const Icon = getCategoryIcon(charge.category);
                         return (
-                          <div key={charge.id} className="flex items-center justify-between text-sm">
-                            <span className="flex items-center gap-2">
-                              <Icon className="w-4 h-4 text-muted-foreground" />
-                              {charge.description}
-                              <span className="text-xs text-muted-foreground">
-                                ({new Date(charge.date_charged).toLocaleDateString()})
+                          <div key={charge.id} className="flex items-start justify-between text-xs md:text-sm gap-2">
+                            <span className="flex items-center gap-2 min-w-0 flex-1">
+                              <Icon className="w-3 h-3 md:w-4 md:h-4 text-muted-foreground flex-shrink-0" />
+                              <span className="truncate">
+                                {charge.description}
+                                <span className="text-xs text-muted-foreground ml-1">
+                                  ({new Date(charge.date_charged).toLocaleDateString()})
+                                </span>
                               </span>
                             </span>
-                            <span className="font-medium">₹{Number(charge.amount).toLocaleString()}</span>
+                            <span className="font-medium flex-shrink-0">Rs. {Number(charge.amount).toLocaleString()}</span>
                           </div>
                         );
                       })}

@@ -181,22 +181,22 @@ export default function Dashboard() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Page Header */}
-        <div className="card-elevated p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-background border border-primary/10">
+        <div className="card-elevated p-4 md:p-6 bg-gradient-to-r from-primary/10 via-primary/5 to-background border border-primary/10">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="page-title mb-1">Dashboard</h1>
-              <p className="page-description">Stay ahead of rooms, payments, and care reminders.</p>
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl lg:text-3xl font-bold mb-1">Dashboard</h1>
+              <p className="text-xs md:text-sm text-muted-foreground">Stay ahead of rooms, payments, and care reminders.</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="default" onClick={() => navigate('/residents/new')}>
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button size="sm" variant="default" onClick={() => navigate('/residents/new')} className="w-full sm:w-auto">
                 Add Resident
               </Button>
-              <Button size="sm" variant="outline" onClick={() => navigate('/reminders')}>
+              <Button size="sm" variant="outline" onClick={() => navigate('/reminders')} className="w-full sm:w-auto">
                 View Reminders
               </Button>
-              <Button size="sm" variant="outline" onClick={() => navigate('/payments')}>
+              <Button size="sm" variant="outline" onClick={() => navigate('/payments')} className="w-full sm:w-auto">
                 Payments
               </Button>
             </div>
@@ -204,36 +204,37 @@ export default function Dashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {statCards.map((stat, index) => (
             <div 
               key={stat.label} 
-              className="stat-card animate-slide-up border border-border/60 hover:border-primary/40 shadow-sm hover:shadow-md transition-all"
+              className="stat-card animate-slide-up border border-border/60 hover:border-primary/40 shadow-sm hover:shadow-md transition-all p-4 md:p-6"
               style={{ animationDelay: `${index * 100}ms` }}
             >
               <div className="flex items-center justify-between">
-                <div className={`w-12 h-12 rounded-xl ${stat.bgColor} flex items-center justify-center`}>
-                  <stat.icon className={`w-6 h-6 ${stat.color}`} />
+                <div className={`w-10 h-10 md:w-12 md:h-12 flex-shrink-0 rounded-xl ${stat.bgColor} flex items-center justify-center`}>
+                  <stat.icon className={`w-5 h-5 md:w-6 md:h-6 ${stat.color}`} />
                 </div>
-                <span className="stat-value">{stat.value}</span>
+                <span className="text-2xl md:text-3xl font-bold">{stat.value}</span>
               </div>
-              <p className="stat-label text-muted-foreground/80">{stat.label}</p>
+              <p className="text-xs md:text-sm text-muted-foreground/80 mt-2 truncate">{stat.label}</p>
             </div>
           ))}
         </div>
 
         {/* Alerts - full width */}
-        <div className="card-elevated p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold flex items-center gap-2">
-              <Bell className="w-5 h-5 text-warning" />
-              Alerts
+        <div className="card-elevated p-4 md:p-6">
+          <div className="flex items-center justify-between mb-3 md:mb-4 gap-2">
+            <h2 className="text-base md:text-lg font-semibold flex items-center gap-2">
+              <Bell className="w-5 h-5 text-warning flex-shrink-0" />
+              <span className="truncate">Alerts</span>
             </h2>
-            <Button variant="ghost" size="sm" onClick={() => navigate('/reminders')}>
-              View All Reminders
+            <Button variant="ghost" size="sm" onClick={() => navigate('/reminders')} className="flex-shrink-0">
+              <span className="hidden sm:inline">View All</span>
+              <span className="sm:hidden">All</span>
             </Button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3">
             {alerts.length > 0 ? (
               alerts.map((alert) => {
                 const due = new Date(alert.due_date);
@@ -242,12 +243,12 @@ export default function Dashboard() {
                 const bg = isOverdue ? 'bg-destructive/10' : isToday ? 'bg-warning/10' : 'bg-accent/10';
                 const Icon = alert.reminder_type === 'birthday' ? Cake : alert.reminder_type === 'payment' ? CreditCard : AlertCircle;
                 return (
-                  <div key={alert.id} className={`flex items-start gap-3 p-4 rounded-lg ${bg}`}>
-                    <Icon className={`w-5 h-5 ${isOverdue ? 'text-destructive' : isToday ? 'text-warning' : 'text-accent'} flex-shrink-0 mt-0.5`} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{alert.title}</p>
-                      <p className="text-xs text-muted-foreground truncate">{alert.description}{alert.resident_name ? ` • ${alert.resident_name}` : ''}</p>
-                      <p className="text-xs text-muted-foreground">Due: {due.toLocaleDateString()}</p>
+                  <div key={alert.id} className={`flex items-start gap-2 md:gap-3 p-3 md:p-4 rounded-lg ${bg}`}>
+                    <Icon className={`w-4 h-4 md:w-5 md:h-5 ${isOverdue ? 'text-destructive' : isToday ? 'text-warning' : 'text-accent'} flex-shrink-0 mt-0.5`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs md:text-sm font-medium truncate">{alert.title}</p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">{alert.description}{alert.resident_name ? ` • ${alert.resident_name}` : ''}</p>
+                      <p className="text-xs text-muted-foreground mt-1">Due: {due.toLocaleDateString()}</p>
                     </div>
                   </div>
                 );

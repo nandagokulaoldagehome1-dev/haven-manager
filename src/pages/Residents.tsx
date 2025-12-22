@@ -153,20 +153,20 @@ export default function Residents() {
 
   return (
     <AppLayout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Page Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="page-header mb-0">
-            <h1 className="page-title">Residents</h1>
-            <p className="page-description">
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl lg:text-3xl font-bold">Residents</h1>
+            <p className="text-xs md:text-sm text-muted-foreground mt-1">
               Manage all residents in your care home
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <BulkPhotoFix />
-            <Button onClick={() => navigate('/residents/new')}>
+            <Button onClick={() => navigate('/residents/new')} className="w-full sm:w-auto">
               <Plus className="w-4 h-4" />
-              Add Resident
+              <span className="ml-2">Add Resident</span>
             </Button>
           </div>
         </div>
@@ -188,15 +188,15 @@ export default function Residents() {
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
         ) : filteredResidents.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
             {filteredResidents.map((resident, index) => (
               <div 
                 key={resident.id}
-                className="card-elevated p-5 animate-slide-up"
+                className="card-elevated p-4 md:p-5 animate-slide-up"
                 style={{ animationDelay: `${index * 50}ms` }}
               >
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-18 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ aspectRatio: '7/9' }}>
+                <div className="flex items-start gap-3 md:gap-4">
+                  <div className="w-12 h-16 md:w-14 md:h-18 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0 overflow-hidden" style={{ aspectRatio: '7/9' }}>
                     {resident.photo_url ? (
                       <img 
                         src={resident.photo_url} 
@@ -204,20 +204,20 @@ export default function Residents() {
                         className="w-full h-full object-cover"
                       />
                     ) : (
-                      <Users className="w-6 h-6 text-primary" />
+                      <Users className="w-5 h-5 md:w-6 md:h-6 text-primary" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold truncate">{resident.full_name}</h3>
-                        <p className="text-sm text-muted-foreground">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm md:text-base font-semibold truncate">{resident.full_name}</h3>
+                        <p className="text-xs md:text-sm text-muted-foreground truncate">
                           {resident.age} years • {resident.gender}
                         </p>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -252,26 +252,26 @@ export default function Residents() {
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2">
+                <div className="mt-3 md:mt-4 space-y-2">
                   {resident.phone && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Phone className="w-4 h-4" />
-                      <span>{resident.phone}</span>
+                    <div className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground">
+                      <Phone className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
+                      <span className="truncate">{resident.phone}</span>
                     </div>
                   )}
                   {resident.address && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
+                    <div className="flex items-center gap-2 text-xs md:text-sm text-muted-foreground">
+                      <MapPin className="w-3 h-3 md:w-4 md:h-4 flex-shrink-0" />
                       <span className="truncate">{resident.address}</span>
                     </div>
                   )}
                 </div>
 
-                <div className="mt-4 pt-4 border-t border-border">
+                <div className="mt-3 md:mt-4 pt-3 md:pt-4 border-t border-border">
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    className="w-full"
+                    className="w-full text-xs md:text-sm"
                     onClick={() => navigate(`/residents/${resident.id}`)}
                   >
                     View Profile
