@@ -4,7 +4,7 @@ project_id = "geimemclslezirwtuvkh"
 verify_jwt = false
 
 [functions.upload-to-drive]
-verify_jwt = false
+verify_jwt = true
 
 [functions.google-drive-auth]
 verify_jwt = true
