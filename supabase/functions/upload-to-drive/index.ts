@@ -251,27 +251,42 @@ async function uploadToDrive(accessToken: string, fileName: string, fileContentB
     console.error("Upload error:", data);
     throw new Error(data.error?.message || "Failed to upload to Google Drive");
   }
-
-  // Make file publicly viewable
-  const permRes = await driveFetch(
-    accessToken,
-    `https://www.googleapis.com/drive/v3/files/${data.id}/permissions?supportsAllDrives=true`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: "reader", type: "anyone" }),
-    }
-  );
-  if (!permRes.ok) {
-    const permErr = await permRes.json().catch(() => ({}));
-    console.error("Permission error:", permErr);
-    throw new Error(permErr.error?.message || `Failed to set public permission (status ${permRes.status})`);
-  }
-
+  // Do NOT make file public; keep restricted to Drive account
   return {
     id: data.id,
     webViewLink: data.webViewLink || `https://drive.google.com/file/d/${data.id}/view`,
   };
+}
+
+async function downloadFromDrive(accessToken: string, fileId: string): Promise<{ mimeType: string; fileName: string; contentBase64: string }> {
+  // Get metadata
+  const metaRes = await driveFetch(
+    accessToken,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType&supportsAllDrives=true`
+  );
+  const meta = await metaRes.json().catch(() => ({}));
+  if (!metaRes.ok) {
+    console.error("Metadata error:", meta);
+    throw new Error(meta.error?.message || "Failed to get file metadata");
+  }
+
+  // Download file content
+  const dlRes = await driveFetch(
+    accessToken,
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`
+  );
+  if (!dlRes.ok) {
+    const err = await dlRes.text().catch(() => "");
+    console.error("Download error:", err);
+    throw new Error("Failed to download file content");
+  }
+  const arrayBuf = await dlRes.arrayBuffer();
+  const bytes = new Uint8Array(arrayBuf);
+  let binary = "";
+  for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  const base64 = btoa(binary);
+
+  return { mimeType: meta.mimeType || "application/octet-stream", fileName: meta.name || fileId, contentBase64: base64 };
 }
 
 async function deleteFromDrive(accessToken: string, fileId: string) {
@@ -333,7 +348,15 @@ serve(async (req) => {
       });
     }
 
-    throw new Error('Invalid action. Use "upload" or "delete"');
+    if (action === "download") {
+      if (!fileId) throw new Error("Missing required field: fileId");
+      const result = await downloadFromDrive(accessToken, fileId);
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    throw new Error('Invalid action. Use "upload", "download" or "delete"');
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     console.error("Error:", msg);

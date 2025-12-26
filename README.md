@@ -123,6 +123,8 @@ supabase secrets set GOOGLE_CLIENT_ID=your_client_id_here
 supabase secrets set GOOGLE_CLIENT_SECRET=your_client_secret_here
 ```
 
+Files uploaded via the app remain private in Google Drive (no public "anyone" permissions are added). Downloads and shares use a secure server-side proxy so links are not exposed.
+
 #### 4. Connect in Application
 1. Login as super admin
 2. Navigate to Settings → Google Drive Integration
@@ -131,7 +133,7 @@ supabase secrets set GOOGLE_CLIENT_SECRET=your_client_secret_here
 5. Documents will now auto-upload to Drive
 
 ### Edge Functions
-- `upload-to-drive`: Handles file uploads and deletions
+- `upload-to-drive`: Handles file uploads, deletions, and secure downloads (no public links)
 - `google-drive-auth`: Initiates OAuth flow
 - `google-drive-callback`: Processes OAuth callback
 - `google-drive-status`: Checks connection status
@@ -153,8 +155,8 @@ supabase secrets set GOOGLE_CLIENT_SECRET=your_client_secret_here
 
 ### Receipt Actions
 - **Download**: Save as PDF
-- **Print**: Direct browser print
-- **Share on WhatsApp**: Share receipt file or text
+- **Print**: Reliable Chrome desktop printing via hidden iframe (avoids popup blockers)
+- **Share on WhatsApp**: Mobile shares the receipt file via Web Share; desktop uses text-only, attach the downloaded PDF manually
 
 ## 🗃️ Database Schema
 
@@ -271,6 +273,13 @@ SUPABASE_URL=auto-provided
 SUPABASE_SERVICE_ROLE_KEY=auto-provided
 SUPABASE_ANON_KEY=auto-provided
 ```
+
+### Troubleshooting Dev Server
+- Ensure Node.js 18+ is installed (`node -v`)
+- Reinstall dependencies: delete `node_modules` and run `npm install`
+- If another lockfile (e.g., `bun.lockb`) exists, prefer npm or remove conflicting locks
+- Check that required Supabase secrets are set and functions deployed
+- Verify port availability (Vite defaults to 5173)
 
 ## 📝 Key Features in Detail
 

@@ -259,14 +259,31 @@ export function downloadReceiptPDF(data: ReceiptData) {
 
 export function printReceiptPDF(data: ReceiptData) {
   const doc = generateReceiptPDF(data);
-  // Open PDF in new window for printing
+  // Use hidden iframe printing to avoid popup blockers on desktop browsers
   const pdfBlob = doc.output('blob');
   const pdfUrl = URL.createObjectURL(pdfBlob);
-  const printWindow = window.open(pdfUrl);
-  if (printWindow) {
-    printWindow.onload = () => {
-      printWindow.print();
-    };
-  }
+
+  const iframe = document.createElement('iframe');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.src = pdfUrl;
+  document.body.appendChild(iframe);
+
+  iframe.onload = () => {
+    try {
+      iframe.contentWindow?.focus();
+      iframe.contentWindow?.print();
+    } finally {
+      // Cleanup after print call
+      setTimeout(() => {
+        URL.revokeObjectURL(pdfUrl);
+        document.body.removeChild(iframe);
+      }, 1000);
+    }
+  };
 }
 

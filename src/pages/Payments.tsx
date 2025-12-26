@@ -334,45 +334,45 @@ export default function Payments() {
       // Create a File object from the blob
       const pdfFile = new File([pdfBlob], fileName, { type: 'application/pdf' });
 
+      const shareText = `Receipt #${payment.receipt_number}\nAmount: ₹${payment.amount.toLocaleString()}\nDate: ${new Date(payment.payment_date).toLocaleDateString()}\nResident: ${payment.resident_name || 'Unknown'}`;
+      const navigatorAny = navigator as any;
+      const canShareFiles = typeof navigatorAny?.canShare === 'function' && navigatorAny.canShare({ files: [pdfFile] }) === true;
+
       // Try to use Web Share API (available on mobile browsers)
-      if (navigator.share) {
+      if (typeof navigatorAny?.share === 'function') {
         try {
-          // Try sharing with file first (for mobile devices)
-          await navigator.share({
-            title: `Payment Receipt - ${payment.resident_name}`,
-            text: `Receipt #${payment.receipt_number} for ₹${payment.amount.toLocaleString()}`,
-            files: [pdfFile],
-          });
-          return; // Successfully shared
-        } catch (error: any) {
-          // If file sharing fails, try sharing text only
-          if (error.name !== 'AbortError' && error.name !== 'NotAllowedError') {
-            console.log('File sharing not supported, trying text-only share');
-            try {
-              await navigator.share({
-                title: `Payment Receipt - ${payment.resident_name}`,
-                text: `Receipt #${payment.receipt_number}\nAmount: ₹${payment.amount.toLocaleString()}\nDate: ${new Date(payment.payment_date).toLocaleDateString()}`,
-              });
-              // Also download PDF
-              doc.save(fileName);
-              toast({
-                title: 'Shared & Downloaded',
-                description: 'Receipt shared and PDF downloaded.',
-              });
-              return;
-            } catch (textError: any) {
-              if (textError.name === 'AbortError') {
-                console.log('User cancelled share');
-                return;
-              }
-              throw textError;
-            }
-          } else if (error.name === 'AbortError') {
-            // User cancelled, don't show error
-            console.log('User cancelled share');
+          // Prefer native share with file support
+          if (canShareFiles) {
+            await navigatorAny.share({
+              title: `Payment Receipt - ${payment.resident_name}`,
+              text: `Receipt #${payment.receipt_number} for ₹${payment.amount.toLocaleString()}`,
+              files: [pdfFile],
+            });
+            toast({ title: 'Shared', description: 'Receipt shared successfully.' });
             return;
           }
-          throw error;
+
+          // Fallback to text-only native share
+          await navigatorAny.share({
+            title: `Payment Receipt - ${payment.resident_name}`,
+            text: shareText,
+          });
+          // Also download PDF for attaching manually
+          doc.save(fileName);
+          toast({ title: 'Shared & Downloaded', description: 'Receipt shared and PDF downloaded.' });
+          return;
+        } catch (error: any) {
+          // If file sharing fails, try sharing text only
+          if (error?.name === 'AbortError') {
+            // User cancelled, don't show error
+            return;
+          }
+          // Desktop or unsupported share targets: open WhatsApp Web with text and download PDF
+          const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+          window.open(whatsappUrl, '_blank');
+          doc.save(fileName);
+          toast({ title: 'Opened WhatsApp', description: 'WhatsApp Web opened and PDF downloaded.' });
+          return;
         }
       }
 

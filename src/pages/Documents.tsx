@@ -39,7 +39,8 @@ import {
   Eye,
   HardDrive,
   Download,
-  FolderDown
+  FolderDown,
+  Share2
 } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -316,21 +317,25 @@ export default function Documents() {
 
     for (const doc of docsToDownload) {
       try {
-        // For Google Drive files, we need to use a proxy or direct download URL
-        let downloadUrl = doc.file_url;
-        
-        // Convert Google Drive view URL to direct download URL
-        if (doc.file_url.includes('drive.google.com/file/d/')) {
-          const fileId = doc.file_url.match(/\/d\/([^/]+)/)?.[1];
-          if (fileId) {
-            downloadUrl = `https://drive.google.com/uc?export=download&id=${fileId}`;
+        let blob: Blob | null = null;
+        if (isGoogleDriveFile(doc)) {
+          const fileId = doc.drive_file_id || doc.file_url.match(/\/d\/([^/]+)/)?.[1] || doc.file_url;
+          const { data } = await supabase.functions.invoke('upload-to-drive', { body: { action: 'download', fileId } });
+          if (data?.success) {
+            const { mimeType, contentBase64 } = data;
+            const byteChars = atob(contentBase64);
+            const byteNums = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+            const byteArray = new Uint8Array(byteNums);
+            blob = new Blob([byteArray], { type: mimeType || 'application/octet-stream' });
           }
+        } else {
+          const response = await fetch(doc.file_url);
+          if (!response.ok) throw new Error('Failed to fetch file');
+          blob = await response.blob();
         }
 
-        const response = await fetch(downloadUrl);
-        if (!response.ok) throw new Error('Failed to fetch file');
-        
-        const blob = await response.blob();
+        if (!blob) throw new Error('Could not obtain file blob');
         const folderName = doc.resident_name || 'Unknown';
         zip.file(`${folderName}/${doc.file_name}`, blob);
         successCount++;
@@ -396,6 +401,118 @@ export default function Documents() {
 
   const isGoogleDriveFile = (doc: Document) => {
     return doc.drive_file_id || doc.file_url.includes('drive.google.com') || doc.file_url.startsWith('gdrive:');
+  };
+
+  const getDirectDownloadUrl = (url: string) => {
+    // Convert common Google Drive URLs to direct download
+    if (url.includes('drive.google.com/file/d/')) {
+      const fileId = url.match(/\/d\/([^/]+)/)?.[1];
+      if (fileId) return `https://drive.google.com/uc?export=download&id=${fileId}`;
+    }
+    if (url.includes('drive.google.com/open') && url.includes('id=')) {
+      const id = new URL(url).searchParams.get('id');
+      if (id) return `https://drive.google.com/uc?export=download&id=${id}`;
+    }
+    if (url.includes('drive.google.com/uc') && url.includes('id=')) {
+      const id = new URL(url).searchParams.get('id');
+      if (id) return `https://drive.google.com/uc?export=download&id=${id}`;
+    }
+    return url;
+  };
+
+  const handleDownload = async (doc: Document) => {
+    try {
+      if (isGoogleDriveFile(doc)) {
+        const fileId = doc.drive_file_id || doc.file_url.match(/\/d\/([^/]+)/)?.[1] || doc.file_url;
+        const { data, error } = await supabase.functions.invoke('upload-to-drive', {
+          body: { action: 'download', fileId },
+        });
+        if (error || !data?.success) throw new Error(data?.error || 'Download failed');
+        const { mimeType, fileName, contentBase64 } = data;
+        const byteChars = atob(contentBase64);
+        const byteNums = new Array(byteChars.length);
+        for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+        const byteArray = new Uint8Array(byteNums);
+        const blob = new Blob([byteArray], { type: mimeType || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = doc.file_name || fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast({ title: 'Download started', description: doc.file_name || fileName });
+      } else {
+        const downloadUrl = getDirectDownloadUrl(doc.file_url);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = doc.file_name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast({ title: 'Download started', description: doc.file_name });
+      }
+    } catch (error) {
+      toast({ title: 'Download failed', description: 'Unable to start download.', variant: 'destructive' });
+    }
+  };
+
+  const handleShare = async (doc: Document) => {
+    const shareText = `Document: ${doc.file_name}\nResident: ${doc.resident_name || 'Unknown'}\nType: ${getDocumentTypeLabel(doc.document_type)}`;
+    const navigatorAny = navigator as any;
+    try {
+      // Attempt to share the file when possible
+      let fileToShare: File | null = null;
+      if (isGoogleDriveFile(doc)) {
+        const fileId = doc.drive_file_id || doc.file_url.match(/\/d\/([^/]+)/)?.[1] || doc.file_url;
+        try {
+          const { data } = await supabase.functions.invoke('upload-to-drive', { body: { action: 'download', fileId } });
+          if (data?.success) {
+            const { mimeType, fileName, contentBase64 } = data;
+            const byteChars = atob(contentBase64);
+            const byteNums = new Array(byteChars.length);
+            for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+            const byteArray = new Uint8Array(byteNums);
+            const blob = new Blob([byteArray], { type: mimeType || 'application/octet-stream' });
+            fileToShare = new File([blob], doc.file_name || fileName, { type: mimeType || 'application/octet-stream' });
+          }
+        } catch {
+          // Proxy download may fail; will fallback to text-only share
+        }
+      } else {
+        const directUrl = getDirectDownloadUrl(doc.file_url);
+        try {
+          const resp = await fetch(directUrl);
+          if (resp.ok) {
+            const blob = await resp.blob();
+            fileToShare = new File([blob], doc.file_name, { type: blob.type || 'application/octet-stream' });
+          }
+        } catch {
+          // Fetch may fail due to CORS; fallback
+        }
+      }
+
+      const canShareFiles = fileToShare && typeof navigatorAny?.canShare === 'function' && navigatorAny.canShare({ files: [fileToShare] }) === true;
+      if (typeof navigatorAny?.share === 'function') {
+        if (canShareFiles) {
+          await navigatorAny.share({ title: 'Share Document', text: shareText, files: [fileToShare!] });
+          toast({ title: 'Shared', description: 'Document shared successfully.' });
+          return;
+        }
+        await navigatorAny.share({ title: 'Share Document', text: shareText });
+        toast({ title: 'Shared', description: 'Details shared.' });
+        return;
+      }
+
+      // Desktop fallback: open WhatsApp Web with text only (no public links)
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      window.open(whatsappUrl, '_blank');
+      toast({ title: 'Opened WhatsApp', description: 'WhatsApp Web opened for sharing.' });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return;
+      toast({ title: 'Share failed', description: 'Unable to share document.', variant: 'destructive' });
+    }
   };
 
   // Get unique residents from filtered documents for bulk download options
@@ -638,6 +755,24 @@ export default function Documents() {
                   >
                     <Eye className="w-4 h-4" />
                     View
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleDownload(doc)}
+                  >
+                    <Download className="w-4 h-4" />
+                    Download
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="flex-1"
+                    onClick={() => handleShare(doc)}
+                  >
+                    <Share2 className="w-4 h-4" />
+                    Share
                   </Button>
                   <Button 
                     variant="outline" 
