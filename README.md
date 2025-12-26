@@ -274,6 +274,19 @@ SUPABASE_SERVICE_ROLE_KEY=auto-provided
 SUPABASE_ANON_KEY=auto-provided
 ```
 
+### Netlify Setup
+- Remove secrets from repo:
+   - `git rm --cached .env`
+   - Add `.env` to `.gitignore` (already included)
+   - `git commit -m "Remove secrets and ignore .env" && git push`
+- Rotate exposed keys (Supabase) if they were committed previously.
+- In Netlify → Site settings → Build & deploy → Environment, add:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+   - (Optional) `VITE_SUPABASE_PROJECT_ID`
+- Confirm code reads envs via `import.meta.env.VITE_*` (see `src/lib/supabase.ts`).
+- Re-deploy on Netlify.
+
 ### Troubleshooting Dev Server
 - Ensure Node.js 18+ is installed (`node -v`)
 - Reinstall dependencies: delete `node_modules` and run `npm install`
