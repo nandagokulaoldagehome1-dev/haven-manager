@@ -74,7 +74,6 @@ export default function AcceptInvite() {
         if (session) {
           setInviteToken(session.access_token ?? inviteToken);
           setVerifying(false);
-          navigate('/dashboard');
           return;
         }
 
@@ -103,7 +102,6 @@ export default function AcceptInvite() {
         setInviteToken(session.access_token ?? null);
         setVerifying(false);
         toast({ title: 'Invite accepted successfully!' });
-        navigate('/dashboard');
       }
     });
 
