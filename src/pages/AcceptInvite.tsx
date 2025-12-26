@@ -34,37 +34,59 @@ export default function AcceptInvite() {
   const [inviteToken, setInviteToken] = useState<string | null>(null);
 
   useEffect(() => {
-    const verifyInviteToken = async () => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const processInviteFromHash = async () => {
+      const hashParams = new URLSearchParams(window.location.hash.substring(1));
+      const accessToken = hashParams.get('access_token');
+      const refreshToken = hashParams.get('refresh_token');
+      const type = hashParams.get('type');
+
+      if (type === 'invite' && accessToken && refreshToken) {
+        // Hand off to Supabase so it can persist the session and emit SIGNED_IN
+        await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        setInviteToken(accessToken);
+        return true;
+      }
+
+      // Fallback to query param token (legacy)
+      const tokenFromQuery = new URLSearchParams(window.location.search).get('token');
+      if (tokenFromQuery) {
+        setInviteToken(tokenFromQuery);
+        return true;
+      }
+
+      return false;
+    };
+
+    const bootstrap = async () => {
       try {
-        // Check for token in URL hash (format: #access_token=xxx&...)
-        const hashParams = new URLSearchParams(window.location.hash.substring(1));
-        const accessToken = hashParams.get('access_token');
-        const type = hashParams.get('type');
+        setVerifying(true);
 
-        // Also check query params
-        const searchParams = new URLSearchParams(window.location.search);
-        const tokenFromQuery = searchParams.get('token');
+        // 1) Let Supabase parse the hash and fire SIGNED_IN
+        const handled = await processInviteFromHash();
 
-        if (type === 'invite' && accessToken) {
-          // Set the session with the access token
-          const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: hashParams.get('refresh_token') || '',
-          });
-
-          if (error) throw error;
-          if (data?.user) {
-            setInviteToken(accessToken);
-            setVerifying(false);
-            return;
-          }
-        } else if (tokenFromQuery) {
-          setInviteToken(tokenFromQuery);
+        // 2) If already have a session, skip waiting
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          setInviteToken(session.access_token ?? inviteToken);
           setVerifying(false);
+          navigate('/dashboard');
           return;
         }
 
-        throw new Error('Invalid or missing invite token');
+        // 3) Wait for Supabase to emit SIGNED_IN; show error if it never happens
+        timeoutId = setTimeout(() => {
+          setVerifying(false);
+          toast({
+            title: 'Invitation Error',
+            description: 'This invitation link may be invalid or expired. Please request a new one.',
+            variant: 'destructive',
+          });
+        }, handled ? 6000 : 2000);
       } catch (error: any) {
         console.error('Invite verification error:', error);
         toast({
@@ -72,12 +94,26 @@ export default function AcceptInvite() {
           description: error.message || 'This invitation link is invalid or has expired.',
           variant: 'destructive',
         });
-        setTimeout(() => navigate('/auth'), 2000);
+        setTimeout(() => navigate('/auth'), 1500);
       }
     };
 
-    verifyInviteToken();
-  }, [navigate, toast]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        setInviteToken(session.access_token ?? null);
+        setVerifying(false);
+        toast({ title: 'Invite accepted successfully!' });
+        navigate('/dashboard');
+      }
+    });
+
+    bootstrap();
+
+    return () => {
+      subscription.unsubscribe();
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [inviteToken, navigate, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
