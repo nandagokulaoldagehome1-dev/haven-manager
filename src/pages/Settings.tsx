@@ -564,7 +564,7 @@ export default function Settings() {
             </div>
             <div className="p-3 md:p-4 rounded-lg bg-muted/50">
               <p className="text-xs md:text-sm text-muted-foreground">Maintainer</p>
-              <p className="font-medium break-words">kesh2004ag (GitHub)</p>
+              <p className="font-medium break-words">keshavagarwal2004dev (GitHub)</p>
             </div>
             <div className="p-3 md:p-4 rounded-lg bg-muted/50">
               <p className="text-xs md:text-sm text-muted-foreground">LinkedIn</p>
