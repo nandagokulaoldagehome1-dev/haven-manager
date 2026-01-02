@@ -18,18 +18,22 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
+        manualChunks: (id) => {
           // Vendor chunks
-          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-          'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', '@radix-ui/react-alert-dialog', '@radix-ui/react-select', '@radix-ui/react-popover', '@radix-ui/react-label', '@radix-ui/react-slot'],
-          'vendor-data': ['@tanstack/react-query', 'zustand'],
-          'vendor-utils': ['zod', 'class-variance-authority', 'clsx', 'tailwind-merge'],
-          'vendor-supabase': ['@supabase/supabase-js'],
-          // Feature chunks - lazy load heavy features
-          'pages-residents': ['./src/pages/Residents.tsx', './src/pages/ResidentForm.tsx', './src/pages/ResidentDetail.tsx', './src/pages/ResidentEdit.tsx'],
-          'pages-admin': ['./src/pages/Settings.tsx'],
-          'pages-documents': ['./src/pages/Documents.tsx'],
-          'pages-payments': ['./src/pages/Payments.tsx'],
+          if (id.includes('node_modules')) {
+            if (id.includes('@supabase')) return 'vendor-supabase';
+            if (id.includes('@radix-ui')) return 'vendor-ui';
+            if (id.includes('@tanstack/react-query')) return 'vendor-data';
+            if (id.includes('zod') || id.includes('class-variance-authority') || id.includes('clsx') || id.includes('tailwind-merge')) return 'vendor-utils';
+            return 'vendor-common';
+          }
+          // Page chunks
+          if (id.includes('/pages/Residents') || id.includes('/pages/ResidentForm') || id.includes('/pages/ResidentDetail') || id.includes('/pages/ResidentEdit')) {
+            return 'pages-residents';
+          }
+          if (id.includes('/pages/Settings')) return 'pages-admin';
+          if (id.includes('/pages/Documents')) return 'pages-documents';
+          if (id.includes('/pages/Payments')) return 'pages-payments';
         },
       },
     },
