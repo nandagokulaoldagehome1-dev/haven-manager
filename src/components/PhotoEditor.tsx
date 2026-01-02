@@ -149,16 +149,16 @@ export function PhotoEditor({ open, onClose, imageSrc, onSave }: PhotoEditorProp
 
           {/* Rotation & Flip Controls */}
           <div className="flex justify-center gap-2">
-            <Button variant="outline" size="icon" onClick={handleRotateLeft}>
+            <Button variant="outline" size="icon" onClick={handleRotateLeft} aria-label="Rotate left">
               <RotateCcw className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleRotateRight}>
+            <Button variant="outline" size="icon" onClick={handleRotateRight} aria-label="Rotate right">
               <RotateCw className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleFlipH}>
+            <Button variant="outline" size="icon" onClick={handleFlipH} aria-label="Flip horizontally">
               <FlipHorizontal className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon" onClick={handleFlipV}>
+            <Button variant="outline" size="icon" onClick={handleFlipV} aria-label="Flip vertically">
               <FlipVertical className="w-4 h-4" />
             </Button>
           </div>

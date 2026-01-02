@@ -99,6 +99,7 @@ export function AppSidebar() {
         <Button
           variant="ghost"
           onClick={handleSignOut}
+          aria-label={collapsed ? "Sign out" : undefined}
           className={cn(
             "w-full text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent justify-start",
             collapsed && "justify-center px-2"
@@ -114,27 +115,30 @@ export function AppSidebar() {
   return (
     <>
       {/* Mobile Header */}
-      <div className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-40 flex items-center px-4">
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-card border-b border-border z-40 flex items-center px-4">
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setMobileOpen(true)}
+          aria-label="Open navigation menu"
         >
           <Menu className="w-6 h-6" />
         </Button>
         <div className="flex items-center gap-2 ml-3">
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
-            <Home className="w-4 h-4 text-primary-foreground" />
+            <Home className="w-4 h-4 text-primary-foreground" aria-hidden="true" />
           </div>
           <span className="font-display font-semibold">Care Home</span>
         </div>
-      </div>
+      </header>
 
       {/* Mobile Overlay */}
       {mobileOpen && (
-        <div
+        <button
           className="lg:hidden fixed inset-0 bg-foreground/50 z-40"
           onClick={() => setMobileOpen(false)}
+          aria-label="Close menu"
+          type="button"
         />
       )}
 
@@ -149,6 +153,7 @@ export function AppSidebar() {
           variant="ghost"
           size="icon"
           onClick={() => setMobileOpen(false)}
+          aria-label="Close navigation menu"
           className="absolute top-4 right-4 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
         >
           <X className="w-5 h-5" />
@@ -168,6 +173,7 @@ export function AppSidebar() {
           variant="ghost"
           size="icon"
           onClick={() => setCollapsed(!collapsed)}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-card border border-border shadow-sm hover:bg-muted text-foreground"
         >
           <ChevronLeft className={cn(

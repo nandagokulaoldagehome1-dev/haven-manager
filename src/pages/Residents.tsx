@@ -173,7 +173,7 @@ export default function Residents() {
 
         {/* Search Bar */}
         <div className="relative max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" aria-hidden="true" />
           <Input
             placeholder="Search residents..."
             value={searchQuery}
@@ -217,7 +217,7 @@ export default function Residents() {
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+                          <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0" aria-label="More options">
                             <MoreVertical className="w-4 h-4" />
                           </Button>
                         </DropdownMenuTrigger>

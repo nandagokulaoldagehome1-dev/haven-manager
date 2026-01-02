@@ -194,15 +194,17 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
               <div className="absolute top-1 right-1 flex gap-1">
                 <button
                   onClick={openEditor}
-                  className="p-1 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  aria-label="Edit photo"
+                  className="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
                 >
-                  <Edit2 className="w-3 h-3" />
+                  <Edit2 className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleRemove}
-                  className="p-1 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
+                  aria-label="Remove photo"
+                  className="p-2 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
             )}
@@ -257,19 +259,23 @@ export function PhotoUpload({ value, onChange, className, disabled }: PhotoUploa
       {/* Hidden file inputs */}
       <input
         ref={inputRef}
+        id="photo-upload-gallery"
         type="file"
         accept="image/*"
         onChange={handleChange}
         className="hidden"
+        aria-label="Upload photo from gallery"
         disabled={disabled}
       />
       <input
         ref={cameraRef}
+        id="photo-upload-camera"
         type="file"
         accept="image/*"
         capture="user"
         onChange={handleChange}
         className="hidden"
+        aria-label="Capture photo with camera"
         disabled={disabled}
       />
 
