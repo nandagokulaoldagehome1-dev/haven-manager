@@ -183,7 +183,7 @@ export default function AcceptInvite() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-10">
+    <main className="min-h-screen flex items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md animate-slide-up">
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
@@ -235,6 +235,7 @@ export default function AcceptInvite() {
                 <button
                   type="button"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   onClick={() => setShowPassword((prev) => !prev)}
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -265,6 +266,6 @@ export default function AcceptInvite() {
           </form>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

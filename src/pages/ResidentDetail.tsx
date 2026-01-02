@@ -161,7 +161,7 @@ export default function ResidentDetail() {
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Header with Back Button */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/residents')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/residents')} aria-label="Go back to residents">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <h1 className="text-lg font-semibold">Resident Profile</h1>

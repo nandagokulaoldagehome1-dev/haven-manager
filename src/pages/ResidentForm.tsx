@@ -264,7 +264,7 @@ export default function ResidentForm() {
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/residents')}>
+          <Button variant="ghost" size="icon" onClick={() => navigate('/residents')} aria-label="Go back to residents">
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div>

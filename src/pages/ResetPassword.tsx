@@ -196,13 +196,14 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 flex items-center justify-center p-4">
+    <main className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/5 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => navigate('/')}
+            aria-label="Go back to home"
             className="mb-4 hover:bg-transparent"
           >
             <Home className="w-4 h-4 mr-2" />
@@ -246,6 +247,7 @@ export default function ResetPassword() {
                     <button
                       type="button"
                       className="text-xs text-primary hover:underline"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                       onClick={() => setShowPassword((prev) => !prev)}
                     >
                       {showPassword ? 'Hide' : 'Show'}
@@ -264,6 +266,7 @@ export default function ResetPassword() {
                     <button
                       type="button"
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                      aria-label={showPassword ? "Hide password" : "Show password"}
                       onClick={() => setShowPassword((prev) => !prev)}
                     >
                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -313,6 +316,6 @@ export default function ResetPassword() {
           </form>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

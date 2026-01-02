@@ -225,7 +225,7 @@ Care Home Management
               >
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold">{day.day_of_week}</h3>
-                  <Button variant="ghost" size="icon" onClick={() => handleEdit(day)}>
+                  <Button variant="ghost" size="icon" onClick={() => handleEdit(day)} aria-label={`Edit ${day}`}>
                     <Edit className="w-4 h-4" />
                   </Button>
                 </div>
