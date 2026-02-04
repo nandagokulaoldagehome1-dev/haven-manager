@@ -159,7 +159,7 @@ export default function Residents() {
           <div className="min-w-0">
             <h1 className="text-xl md:text-2xl lg:text-3xl font-bold">Residents</h1>
             <p className="text-xs md:text-sm text-muted-foreground mt-1">
-              Manage all residents in your care home
+              Manage all residents at Nanda Gokula Luxury Retirement Home
             </p>
           </div>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">

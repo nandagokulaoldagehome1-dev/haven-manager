@@ -159,7 +159,7 @@ export default function FoodMenu() {
 ━━━━━━━━━━━━━━━━
 ${menuText}
 ━━━━━━━━━━━━━━━━
-Care Home Management
+  Nanda Gokula Luxury Retirement Home
     `.trim();
 
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;

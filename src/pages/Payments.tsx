@@ -274,7 +274,7 @@ export default function Payments() {
 
       // Generate and download PDF
       const resident = residents.find(r => r.id === formData.resident_id);
-      downloadReceiptPDF({
+      await downloadReceiptPDF({
         receiptNumber,
         residentName: resident?.full_name || 'Unknown',
         paymentDate: formData.payment_date,
@@ -315,7 +315,7 @@ export default function Payments() {
   const shareOnWhatsApp = async (payment: Payment) => {
     try {
       // Generate PDF
-      const doc = generateReceiptPDF({
+      const doc = await generateReceiptPDF({
         receiptNumber: payment.receipt_number,
         residentName: payment.resident_name || 'Unknown',
         paymentDate: payment.payment_date,
@@ -393,8 +393,8 @@ export default function Payments() {
     }
   };
 
-  const handleDownloadPDF = (payment: Payment) => {
-    downloadReceiptPDF({
+  const handleDownloadPDF = async (payment: Payment) => {
+    await downloadReceiptPDF({
       receiptNumber: payment.receipt_number,
       residentName: payment.resident_name || 'Unknown',
       paymentDate: payment.payment_date,
@@ -407,8 +407,8 @@ export default function Payments() {
     });
   };
 
-  const handlePrintPDF = (payment: Payment) => {
-    printReceiptPDF({
+  const handlePrintPDF = async (payment: Payment) => {
+    await printReceiptPDF({
       receiptNumber: payment.receipt_number,
       residentName: payment.resident_name || 'Unknown',
       paymentDate: payment.payment_date,

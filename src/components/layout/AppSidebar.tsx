@@ -55,9 +55,9 @@ export function AppSidebar() {
         {!collapsed && (
           <div className="animate-fade-in">
             <h1 className="font-display font-bold text-sidebar-foreground text-lg leading-tight">
-              Care Home
+              Nanda Gokula Luxury Retirement Home
             </h1>
-            <p className="text-xs text-sidebar-foreground/60">Management System</p>
+            <p className="text-xs text-sidebar-foreground/60">Luxury Retirement Home</p>
           </div>
         )}
       </div>
@@ -128,7 +128,7 @@ export function AppSidebar() {
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
             <Home className="w-4 h-4 text-primary-foreground" aria-hidden="true" />
           </div>
-          <span className="font-display font-semibold">Care Home</span>
+          <span className="font-display font-semibold">Nanda Gokula Luxury Retirement Home</span>
         </div>
       </header>
 

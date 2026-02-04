@@ -1,6 +1,6 @@
-# Care Home Management System
+# Nanda Gokula Luxury Retirement Home Management System
 
-A modern, comprehensive management system for care homes and old age facilities built with React, TypeScript, and Supabase. Features complete resident management, payment tracking, document storage, and multi-admin support.
+A modern, comprehensive management system for Nanda Gokula Luxury Retirement Home built with React, TypeScript, and Supabase. Features complete resident management, payment tracking, document storage, and multi-admin support.
 
 ## 🌟 Features
 
@@ -393,7 +393,7 @@ The following key packages are required for building:
 
 ## 📄 License
 
-This project is proprietary software for care home management.
+This project is proprietary software for retirement home management.
 
 ## 🆘 Support
 
@@ -415,4 +415,4 @@ For issues or questions:
 
 ---
 
-Built with ❤️ for better care home management
+Built with ❤️ for better retirement home management

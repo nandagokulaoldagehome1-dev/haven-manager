@@ -189,7 +189,7 @@ export default function AcceptInvite() {
           <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center">
             <Home className="w-6 h-6 text-primary-foreground" />
           </div>
-          <h1 className="font-display font-bold text-2xl">Care Home</h1>
+          <h1 className="font-display font-bold text-2xl">Nanda Gokula Luxury Retirement Home</h1>
         </div>
 
         <div className="card-elevated p-8">
@@ -198,7 +198,7 @@ export default function AcceptInvite() {
               Complete Your Account Setup
             </h2>
             <p className="text-muted-foreground mt-2">
-              Set your password to access the management system
+              Set your password to access the admin portal
             </p>
           </div>
 
