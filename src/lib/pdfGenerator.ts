@@ -99,8 +99,14 @@ export async function generateReceiptPDF(data: ReceiptData): Promise<jsPDF> {
   });
 
   if (logoDataUrl) {
-    const logoSize = 14;
-    doc.addImage(logoDataUrl, 'PNG', margin + 4, y + 2, logoSize, logoSize);
+    const maxSize = 14;
+    const props = doc.getImageProperties(logoDataUrl);
+    const ratio = props.width / props.height;
+    const drawWidth = ratio >= 1 ? maxSize : maxSize * ratio;
+    const drawHeight = ratio >= 1 ? maxSize / ratio : maxSize;
+    const logoX = margin + 4 + (maxSize - drawWidth) / 2;
+    const logoY = y + 2 + (maxSize - drawHeight) / 2;
+    doc.addImage(logoDataUrl, 'PNG', logoX, logoY, drawWidth, drawHeight);
   }
 
   y += headerHeights + 4;
