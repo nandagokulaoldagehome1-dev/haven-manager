@@ -88,28 +88,43 @@ export async function generateReceiptPDF(data: ReceiptData): Promise<jsPDF> {
 
   // Header row (logo + org name + receipt number)
   const logoDataUrl = await loadLogoDataUrl();
-  const headerHeights = 18;
+  const headerHeights = 24;
   const headerWidths = [22, tableWidth - 22 - 50, 50];
-  drawRow(doc, margin, y, headerWidths, headerHeights, ['', ORG_NAME, `Receipt #${data.receiptNumber}`], {
+  drawRow(doc, margin + headerWidths[0], y, [headerWidths[1], headerWidths[2]], headerHeights, [ORG_NAME, `Receipt #${data.receiptNumber}`], {
     fillColor: headerFill,
     textColor: textDark,
     fontSize: 10,
     bold: true,
-    align: ['center', 'left', 'right'],
+    align: ['left', 'right'],
+  });
+  drawRow(doc, margin, y, [headerWidths[0]], headerHeights, [''], {
+    textColor: textDark,
   });
 
   if (logoDataUrl) {
-    const maxSize = 14;
+    const maxSize = 21;
     const props = doc.getImageProperties(logoDataUrl);
     const ratio = props.width / props.height;
     const drawWidth = ratio >= 1 ? maxSize : maxSize * ratio;
     const drawHeight = ratio >= 1 ? maxSize / ratio : maxSize;
-    const logoX = margin + 4 + (maxSize - drawWidth) / 2;
-    const logoY = y + 2 + (maxSize - drawHeight) / 2;
+    const logoX = margin + 1 + (maxSize - drawWidth) / 2;
+    const logoY = y + 1.5 + (maxSize - drawHeight) / 2;
     doc.addImage(logoDataUrl, 'PNG', logoX, logoY, drawWidth, drawHeight);
   }
 
-  y += headerHeights + 4;
+  y += headerHeights;
+
+  drawRow(
+    doc,
+    margin,
+    y,
+    [tableWidth],
+    8,
+    ['No. 69, Marudhar Township, Vajarahalli Road, Lakshmisagara Gate, Bidadi Hobli, Ramnagar District – 662109, India'],
+    { fontSize: 8, textColor: [80, 90, 100] }
+  );
+
+  y += 12;
 
   // Resident info table
   const infoRowHeight = 8;
@@ -180,14 +195,6 @@ export async function generateReceiptPDF(data: ReceiptData): Promise<jsPDF> {
     align: ['left', 'right'],
   });
   y += chargeRowHeight + 4;
-
-  // Payment status
-  doc.setFillColor(...successGreen);
-  doc.rect(margin, y, 40, 8, 'F');
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.text('PAID', margin + 20, y + 6, { align: 'center' });
 
   // Notes section
   if (data.notes) {
